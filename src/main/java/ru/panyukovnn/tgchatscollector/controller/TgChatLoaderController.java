@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.panyukovnn.tgchatscollector.dto.chathistory.ChatHistoryResponse;
+import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
 import ru.panyukovnn.tgchatscollector.service.handler.TgCollectorHandler;
 
 import java.time.LocalDateTime;
@@ -17,6 +18,11 @@ import java.time.LocalDateTime;
 public class TgChatLoaderController {
 
     private final TgCollectorHandler tgCollectorHandler;
+
+    @GetMapping("/lastChats")
+    public LastChatsResponse getLastChats(@RequestParam(name = "count", required = false, defaultValue = "10") Integer count) {
+        return tgCollectorHandler.handleLastChats(count);
+    }
 
     @GetMapping("/getChatHistory")
     public ChatHistoryResponse getChatHistory(@RequestParam(required = false) String publicChatName,

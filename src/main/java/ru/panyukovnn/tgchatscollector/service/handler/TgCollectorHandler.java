@@ -6,10 +6,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.chathistory.ChatHistoryResponse;
 import ru.panyukovnn.tgchatscollector.dto.chathistory.MessageDto;
 import ru.panyukovnn.tgchatscollector.dto.chathistory.MessagesBatch;
+import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatShort;
 import ru.panyukovnn.tgchatscollector.dto.telegram.TopicShort;
 import ru.panyukovnn.tgchatscollector.exception.TgChatsCollectorException;
@@ -27,24 +29,30 @@ public class TgCollectorHandler {
 
     private static final int MAX_BATCH_SIZE_KB = 190;
 
-    private final TgClientService tgClientService;
     private final ObjectMapper objectMapper;
+    private final TgClientService tgClientService;
+
+    public LastChatsResponse handleLastChats(Integer count) {
+        List<ChatInfoDto> lastChatDtos = tgClientService.findLastChats(count);
+
+        return new LastChatsResponse(lastChatDtos);
+    }
 
     public ChatHistoryResponse handleChatHistory(String publicChatName,
                                                  String privateChatNamePart,
-                                                 String topicName,
+                                                 String topicNamePart,
                                                  @Nullable Integer limit,
                                                  @Nullable LocalDateTime dateFrom,
                                                  @Nullable LocalDateTime dateTo) {
         if (!StringUtils.hasText(publicChatName)
             && !StringUtils.hasText(privateChatNamePart)
-            && !StringUtils.hasText(topicName)) {
-            throw new IllegalArgumentException("publicChatName, privateChatNamePart, topicName не могут быть одновременно пустыми");
+            && !StringUtils.hasText(topicNamePart)) {
+            throw new IllegalArgumentException("publicChatName, privateChatNamePart, topicNamePart не могут быть одновременно пустыми");
         }
 
         ChatShort chat = tgClientService.findChat(null, publicChatName, privateChatNamePart)
             .orElseThrow(() -> new TgChatsCollectorException("31ff", "Не удалось найти чат"));
-        TopicShort topic = Optional.ofNullable(topicName)
+        TopicShort topic = Optional.ofNullable(topicNamePart)
             .map(tn -> tgClientService.findTopicByName(chat.chatId(), tn))
             .orElse(null);
 

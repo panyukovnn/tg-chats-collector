@@ -29,8 +29,6 @@ tg-collector:
       phone: ${TG_CLIENT_PHONE}
     bot:
       token: ${TG_BOT_TOKEN}
-      sk-reading-chat-id: ${SK_READING_CHAT_ID}
-      sk-publishing-chat-id: ${SK_PUBLISHING_CHAT_ID}
   chat-loader:
     default-messages-limit: 2000
     default-days-before-limit: 60
@@ -43,3 +41,9 @@ logging:
   web-logging:
     log-body: true
     log-feign-requests: true
+
+springdoc:
+  swagger-ui:
+    enabled: true
+    tags-sorter: alpha
+  show-actuator: false

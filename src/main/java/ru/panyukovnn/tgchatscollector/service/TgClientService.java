@@ -8,6 +8,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatShort;
 import ru.panyukovnn.tgchatscollector.dto.telegram.TopicShort;
@@ -18,7 +19,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
@@ -226,6 +231,17 @@ public class TgClientService {
                 return new TopicShort(topic.info.isGeneral, topic.info.messageThreadId, topic.info.name, topic.lastMessage.id);
             })
             .get();
+    }
+
+    public List<ChatInfoDto> findLastChats(Integer count) {
+        TdApi.Chats chats = tgClient.send(new TdApi.GetChats(new TdApi.ChatListMain(), count))
+            .join();
+
+        return Arrays.stream(chats.chatIds).boxed()
+            .map(chatId -> tgClient.send(new TdApi.GetChat(chatId)))
+            .map(CompletableFuture::join)
+            .map(chat -> new ChatInfoDto(chat.id, chat.type.getClass().getSimpleName(), chat.title))
+            .toList();
     }
 
     private static Long extractSenderId(TdApi.Message message) {
