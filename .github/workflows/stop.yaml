@@ -18,9 +18,9 @@ jobs:
     steps:
       - name: Stop on server
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.NVPN_SSH_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
-          SSH_USER: ${{ secrets.NVPN_SSH_USER }}
+          SSH_USER: ${{ secrets.SSH_USER }}
           REMOTE_DIR: ${{ needs.get-repo-name.outputs.repo }}
           GH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
         run: |
