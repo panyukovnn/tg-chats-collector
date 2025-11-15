@@ -1,6 +1,6 @@
 package ru.panyukovnn.tgchatscollector.dto.telegram;
 
-public record TopicShort(
+public record TopicInfo(
     Boolean isGeneral,
     Long topicId,
     String title,

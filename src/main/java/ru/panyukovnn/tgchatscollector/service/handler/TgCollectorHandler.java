@@ -1,36 +1,37 @@
 package ru.panyukovnn.tgchatscollector.service.handler;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
-import ru.panyukovnn.tgchatscollector.dto.chathistory.ChatHistoryResponse;
-import ru.panyukovnn.tgchatscollector.dto.chathistory.MessageDto;
-import ru.panyukovnn.tgchatscollector.dto.chathistory.MessagesBatch;
 import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
-import ru.panyukovnn.tgchatscollector.dto.telegram.ChatShort;
-import ru.panyukovnn.tgchatscollector.dto.telegram.TopicShort;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatRequest;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatsResponse;
+import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryRequest;
+import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryResponse;
+import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
+import ru.panyukovnn.tgchatscollector.dto.telegram.TopicInfo;
 import ru.panyukovnn.tgchatscollector.exception.TgChatsCollectorException;
+import ru.panyukovnn.tgchatscollector.mapper.TgMessageMapper;
+import ru.panyukovnn.tgchatscollector.model.TgMessage;
 import ru.panyukovnn.tgchatscollector.service.TgClientService;
+import ru.panyukovnn.tgchatscollector.service.domain.TgMessagesDomainService;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TgCollectorHandler {
 
-    private static final int MAX_BATCH_SIZE_KB = 190;
-
-    private final ObjectMapper objectMapper;
     private final TgClientService tgClientService;
+    private final TgMessageMapper tgMessageMapper;
+    private final TgMessagesDomainService tgMessagesDomainService;
 
     public LastChatsResponse handleLastChats(Integer count) {
         List<ChatInfoDto> lastChatDtos = tgClientService.findLastChats(count);
@@ -38,87 +39,90 @@ public class TgCollectorHandler {
         return new LastChatsResponse(lastChatDtos);
     }
 
-    public ChatHistoryResponse handleChatHistory(String publicChatName,
-                                                 String privateChatNamePart,
-                                                 String topicNamePart,
-                                                 @Nullable Integer limit,
-                                                 @Nullable LocalDateTime dateFrom,
-                                                 @Nullable LocalDateTime dateTo) {
+    public SearchChatsResponse handleFindChat(SearchChatRequest searchChatRequest) {
+        String publicChatName = searchChatRequest.getPublicChatName();
+        String privateChatNamePart = searchChatRequest.getPrivateChatNamePart();
+        String topicNamePart = searchChatRequest.getTopicNamePart();
+
         if (!StringUtils.hasText(publicChatName)
             && !StringUtils.hasText(privateChatNamePart)
             && !StringUtils.hasText(topicNamePart)) {
             throw new IllegalArgumentException("publicChatName, privateChatNamePart, topicNamePart не могут быть одновременно пустыми");
         }
 
-        ChatShort chat = tgClientService.findChat(null, publicChatName, privateChatNamePart)
-            .orElseThrow(() -> new TgChatsCollectorException("31ff", "Не удалось найти чат"));
-        TopicShort topic = Optional.ofNullable(topicNamePart)
-            .map(tn -> tgClientService.findTopicByName(chat.chatId(), tn))
-            .orElse(null);
+        List<ChatInfo> chats = tgClientService.findChats(null, publicChatName, privateChatNamePart);
 
-        List<TgMessageDto> messageDtos = tgClientService.collectAllMessagesFromPublicChat(chat.chatId(), topic, limit, dateFrom, dateTo);
+        if (CollectionUtils.isEmpty(chats)) {
+            throw new TgChatsCollectorException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
+        }
 
-        LocalDateTime firstMessageDateTime = !messageDtos.isEmpty() ? messageDtos.get(0).getDateTime() : null;
-        LocalDateTime lastMessageDateTime = !messageDtos.isEmpty() ? messageDtos.get(messageDtos.size() - 1).getDateTime() : null;
+        List<SearchChatsResponse.ChatInfo> chatInfos = chats.stream()
+            .map(chat -> {
+                SearchChatsResponse.ChatInfo chatInfo = new SearchChatsResponse.ChatInfo();
+                chatInfo.setId(chat.chatId());
+                chatInfo.setTitle(chat.title());
+                chatInfo.setType(chat.type());
 
-        List<MessagesBatch> messageBatches = createMessageBatches(messageDtos);
+                if (StringUtils.hasText(topicNamePart)) {
+                    List<SearchChatsResponse.TopicInfo> topics = tgClientService.findTopicsByName(chat.chatId(), topicNamePart).stream()
+                        .map(ts -> new SearchChatsResponse.TopicInfo(ts.topicId(), ts.title()))
+                        .toList();
 
-        int totalCount = messageBatches.stream()
-            .map(MessagesBatch::getCount)
-            .reduce(0, Integer::sum);
-
-        return ChatHistoryResponse.builder()
-            .chatId(chat.chatId())
-            .chatTitle(chat.title())
-            .chatPublicName(chat.chatPublicName())
-            .topicId(topic != null ? topic.topicId() : null)
-            .topicName(topic != null ? topic.title() : null)
-            .firstMessageDateTime(firstMessageDateTime)
-            .lastMessageDateTime(lastMessageDateTime)
-            .totalCount(totalCount)
-            .messageBatches(messageBatches)
-            .build();
-    }
-
-    private List<MessagesBatch> createMessageBatches(List<TgMessageDto> messageDtos) {
-        List<MessagesBatch> batches = new ArrayList<>();
-        List<MessageDto> currentBatch = new ArrayList<>();
-        int currentBatchSizeBytes = 0;
-
-        for (TgMessageDto message : messageDtos) {
-            MessageDto messageDto = MessageDto.builder()
-                .senderId(message.getSenderId())
-                .replyToText(message.getReplyToText())
-                .id(message.getMessageId())
-                .text(message.getText())
-                .build();
-
-            try {
-                int messageSizeBytes = objectMapper.writeValueAsString(messageDto).getBytes().length;
-
-                if (currentBatchSizeBytes + messageSizeBytes > MAX_BATCH_SIZE_KB * 1024 && !currentBatch.isEmpty()) {
-                    batches.add(MessagesBatch.builder()
-                        .count(currentBatch.size())
-                        .messages(new ArrayList<>(currentBatch))
-                        .build());
-                    currentBatch.clear();
-                    currentBatchSizeBytes = 0;
+                    chatInfo.setTopics(topics);
                 }
 
-                currentBatch.add(messageDto);
-                currentBatchSizeBytes += messageSizeBytes;
-            } catch (Exception e) {
-                log.error("Ошибка при сериализации сообщения в JSON: {}", e.getMessage());
-            }
+                return chatInfo;
+            })
+            .toList();
+
+        return new SearchChatsResponse(chatInfos);
+    }
+
+    /**
+     * Функционал намеренно предельно ограничен, можно грузить либо из бд, либо с последней даты, непосредственно из тг
+     *
+     * @param searchChatHistoryRequest запрос на поиск сообщений
+     * @return история сообщений
+     */
+    public SearchChatHistoryResponse handleSearchChatHistoryByPeriod(SearchChatHistoryRequest searchChatHistoryRequest) {
+        Long chatId = searchChatHistoryRequest.getChatId();
+        Long topicId = searchChatHistoryRequest.getTopicId();
+        LocalDateTime dateFrom = searchChatHistoryRequest.getDateFrom();
+
+        ChatInfo chatInfo = tgClientService.findChatById(chatId);
+        TopicInfo topicInfo = tgClientService.findTopicInfoById(chatId, topicId);
+
+        if (Boolean.TRUE.equals(searchChatHistoryRequest.getReturnFromDb())) {
+            List<TgMessageDto> messagesFromDate = tgMessagesDomainService.findMessagesFromDate(chatId, topicId, dateFrom).stream()
+                .sorted(Comparator.comparing(TgMessage::getDateTime))
+                .map(tgMessageMapper::toDto)
+                .toList();
+
+            return SearchChatHistoryResponse.builder()
+                .chatId(chatInfo.chatId())
+                .chatTitle(chatInfo.title())
+                .chatPublicName(chatInfo.chatPublicName())
+                .topicId(topicInfo != null ? topicInfo.topicId() : null)
+                .topicName(topicInfo != null ? topicInfo.title() : null)
+                .totalCount(messagesFromDate.size())
+                .messages(messagesFromDate)
+                .build();
         }
 
-        if (!currentBatch.isEmpty()) {
-            batches.add(MessagesBatch.builder()
-                .count(currentBatch.size())
-                .messages(currentBatch)
-                .build());
-        }
+        List<TgMessageDto> messageDtos = tgClientService.collectAllMessagesFromPublicChat(chatId, topicInfo, null, dateFrom, null).stream()
+            .sorted(Comparator.comparing(TgMessageDto::getDateTime))
+            .toList();
 
-        return batches;
+        tgMessagesDomainService.saveMessages(chatId, topicId, messageDtos);
+
+        return SearchChatHistoryResponse.builder()
+            .chatId(chatInfo.chatId())
+            .chatTitle(chatInfo.title())
+            .chatPublicName(chatInfo.chatPublicName())
+            .topicId(topicInfo != null ? topicInfo.topicId() : null)
+            .topicName(topicInfo != null ? topicInfo.title() : null)
+            .totalCount(messageDtos.size())
+            .messages(messageDtos)
+            .build();
     }
 }

@@ -1,4 +1,4 @@
-package ru.panyukovnn.tgchatscollector.dto.chathistory;
+package ru.panyukovnn.tgchatscollector.dto.searchchathistory;
 
 import lombok.Builder;
 import lombok.Data;

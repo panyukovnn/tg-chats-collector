@@ -1,6 +1,6 @@
 databaseChangeLog:
   - changeSet:
-      id: "02.create_tg_messages.yml"
+      id: "01.create_tg_messages.yml"
       author: "Panyukov NN"
       changes:
         - createTable:
@@ -37,8 +37,26 @@ databaseChangeLog:
                   type: varchar
                   remarks: "Содержимое сообщения"
               - column:
+                  name: sender_id
+                  type: bigint
+                  remarks: "Идентификатор отправителя сообщения"
+              - column:
+                  name: reply_to_text
+                  type: varchar
+                  remarks: "Текст сообщения, на которое отвечает текущее сообщение"
+              - column:
+                  name: reply_to_message_id
+                  type: bigint
+                  remarks: "Идентификатор сообщения, на которое отвечает текущее сообщение"
+              - column:
+                  name: directly_from_topic
+                  type: bool
+                  remarks: "Признак того, загружено ли сообщение при поиске в конкретном топике (true), или при поиске по всему чату (false). true можно перевести в false, но не наоборот"
+
+              - column:
                   name: create_time
                   type: timestamp
+                  defaultValueComputed: now()
                   remarks: "Время создания"
               - column:
                   name: create_user
@@ -47,6 +65,7 @@ databaseChangeLog:
               - column:
                   name: last_update_time
                   type: timestamp
+                  defaultValueComputed: now()
                   remarks: "Время последнего изменения"
               - column:
                   name: last_update_user

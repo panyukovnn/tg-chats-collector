@@ -27,8 +27,6 @@ tg-collector:
       api-id: ${TG_CLIENT_API_ID}
       api-hash: ${TG_CLIENT_API_HASH}
       phone: ${TG_CLIENT_PHONE}
-    bot:
-      token: ${TG_BOT_TOKEN}
   chat-loader:
     default-messages-limit: 2000
     default-days-before-limit: 60
@@ -37,6 +35,7 @@ tg-collector:
       host: ${INTEGRATION_CONVEYOR_HOST}
 
 logging:
+  config: classpath:ru/panyukovnn/referenceloggingstarter/logback-spring.xml
   log-exec-time: true
   web-logging:
     log-body: true

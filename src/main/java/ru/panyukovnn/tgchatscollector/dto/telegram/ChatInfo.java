@@ -1,7 +1,8 @@
 package ru.panyukovnn.tgchatscollector.dto.telegram;
 
-public record ChatShort(
+public record ChatInfo(
     Long chatId,
     String chatPublicName,
+    String type,
     String title) {
 }

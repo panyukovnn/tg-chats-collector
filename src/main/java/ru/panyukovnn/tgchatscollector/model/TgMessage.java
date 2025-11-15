@@ -37,6 +37,10 @@ public class TgMessage extends AuditableEntity {
      */
     private LocalDateTime dateTime;
     /**
+     * Идентификатор отправителя
+     */
+    private Long senderId;
+    /**
      * Текст, изображение, видео
      */
     @Enumerated(EnumType.STRING)
@@ -45,6 +49,14 @@ public class TgMessage extends AuditableEntity {
      * Содержимое сообщения
      */
     private String content;
+    /**
+     * Текст сообщения, на который отвечает текущее сообщение
+     */
+    private String replyToText;
+    /**
+     * Идентификатор сообщения, на которое отвечает текущее сообщение
+     */
+    private Long replyToMessageId;
 
     @Override
     public boolean equals(Object o) {

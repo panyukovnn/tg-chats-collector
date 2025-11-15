@@ -10,14 +10,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
-import ru.panyukovnn.tgchatscollector.dto.telegram.ChatShort;
-import ru.panyukovnn.tgchatscollector.dto.telegram.TopicShort;
+import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
+import ru.panyukovnn.tgchatscollector.dto.telegram.TopicInfo;
 import ru.panyukovnn.tgchatscollector.exception.TgChatsCollectorException;
 import ru.panyukovnn.tgchatscollector.property.TgChatLoaderProperty;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,25 +34,24 @@ public class TgClientService {
     private final SimpleTelegramClient tgClient;
     private final TgChatLoaderProperty tgChatLoaderProperty;
 
-    public ChatShort findChat(Long chatId, String publicChatName) {
+    @SneakyThrows
+    public ChatInfo findChats(Long chatId, String publicChatName) {
         if (chatId == null && publicChatName == null) {
             throw new TgChatsCollectorException("46ea", "Отсутствуют chatId и chatName для идентификации чата");
         }
 
-        try {
-            CompletableFuture<TdApi.Chat> chatCompletableFuture = chatId != null
-                ? tgClient.send(new TdApi.GetChat(chatId))
-                : tgClient.send(new TdApi.SearchPublicChat(publicChatName));
+        TdApi.Chat chat = chatId != null
+            ? tgClient.send(new TdApi.GetChat(chatId)).get()
+            : tgClient.send(new TdApi.SearchPublicChat(publicChatName)).get();
 
-            return chatCompletableFuture
-                .thenApply(chat -> new ChatShort(chat.id, fetchChannelPublicName(chat), chat.title))
-                .get();
-        } catch (InterruptedException | ExecutionException e) {
-            throw new TgChatsCollectorException("9a1d",
-                "Ошибка при поиске чата по идентификатору: %s. Или имени: %s. Сообщение об ошибке: %s"
-                    .formatted(chatId, publicChatName, e.getMessage()),
-                e);
-        }
+        return new ChatInfo(chat.id, fetchChannelPublicName(chat), chat.type.getClass().getSimpleName(), chat.title);
+    }
+
+    @SneakyThrows
+    public ChatInfo findChatById(Long chatId) {
+        TdApi.Chat chat = tgClient.send(new TdApi.GetChat(chatId)).get();
+
+        return new ChatInfo(chat.id, fetchChannelPublicName(chat), chat.type.getClass().getSimpleName(), chat.title);
     }
 
     /**
@@ -63,24 +60,16 @@ public class TgClientService {
      * @param privateChatNamePart часть имени приватного чата
      * @return чат
      */
-    public Optional<ChatShort> findChat(Long chatId, String publicChatName, String privateChatNamePart) {
+    public List<ChatInfo> findChats(Long chatId, String publicChatName, String privateChatNamePart) {
         if (chatId != null || StringUtils.hasText(publicChatName)) {
-            return Optional.of(findChat(chatId, publicChatName));
+            return List.of(findChats(chatId, publicChatName));
         }
 
         if (privateChatNamePart != null) {
-            List<ChatShort> personalChatsByNamePart = findPersonalChatByNamePart(privateChatNamePart);
-
-            if (personalChatsByNamePart.size() > 1) {
-                throw new TgChatsCollectorException("4a4a", "Конфликт, найдено более одного чата по части имени персонального чата: " + privateChatNamePart);
-            }
-
-            if (personalChatsByNamePart.size() == 1) {
-                return Optional.of(personalChatsByNamePart.get(0));
-            }
+            return findPersonalChatByNamePart(privateChatNamePart);
         }
 
-        return Optional.empty();
+        return List.of();
     }
 
     /**
@@ -94,19 +83,19 @@ public class TgClientService {
      * @return список сообщений из чата
      */
     public List<TgMessageDto> collectAllMessagesFromPublicChat(Long chatId,
-                                                               TopicShort topic,
+                                                               TopicInfo topic,
                                                                @Nullable Integer limit,
                                                                @Nullable LocalDateTime dateFrom,
                                                                @Nullable LocalDateTime dateTo) {
-        List<TgMessageDto> messageDtos = new ArrayList<>();
-        long fromMessageId = 0L;
-        if (dateFrom == null) {
-            dateFrom = LocalDateTime.of(
-                LocalDate.now(ZoneOffset.UTC).minusDays(5000),
-                LocalTime.MIN);
+        if (limit == null && dateFrom == null) {
+            // Если не заданы ограничения, то задаем дефолтный лимит
+            limit = tgChatLoaderProperty.defaultMessagesLimit();
         }
 
-        int limitMessagesToLoad = limit == null ? tgChatLoaderProperty.defaultMessagesLimit() : limit;
+        List<TgMessageDto> messageDtos = new ArrayList<>();
+        long fromMessageId = 0L;
+
+        int limitMessagesToLoad = limit == null ? Integer.MAX_VALUE : limit;
 
         Long previousFirstMessageId = null;
         Long previousLastMessageId = null;
@@ -142,7 +131,7 @@ public class TgClientService {
 
                 TdApi.MessageContent content = message.content;
 
-                String text = extractText(content);
+                String text = extractMessageTextSafely(content);
 
                 if (!StringUtils.hasText(text)) {
                     continue;
@@ -152,7 +141,7 @@ public class TgClientService {
                 LocalDateTime messageDateTime = messageDateTimeUtc
                     .plusHours(3); // Московское время
 
-                if (messageDateTimeUtc.isBefore(dateFrom)) {
+                if (dateFrom != null && messageDateTimeUtc.isBefore(dateFrom)) {
                     log.info("Извлечено сообщений: {}", messageDtos.size());
 
                     return messageDtos;
@@ -162,11 +151,14 @@ public class TgClientService {
                     continue;
                 }
 
+                ReplyToMessage replyToMessage = fetchReplyToMessage(message);
+
                 messageDtos.add(TgMessageDto.builder()
                     .senderId(extractSenderId(message))
                     .dateTime(messageDateTime)
                     .messageId(message.id)
-                    .replyToText(fetchReplyToMessageText(message))
+                    .replyToText(replyToMessage != null ? replyToMessage.text : null)
+                    .replyToMessageId(replyToMessage != null ? replyToMessage.id : null)
                     .text(text)
                     .build());
 
@@ -184,7 +176,7 @@ public class TgClientService {
     }
 
     @SneakyThrows
-    public List<ChatShort> findPersonalChatByNamePart(String namePart) {
+    public List<ChatInfo> findPersonalChatByNamePart(String namePart) {
         TdApi.Chats mainChats = tgClient.send(new TdApi.GetChats(new TdApi.ChatListMain(), Integer.MAX_VALUE))
             .get();
         TdApi.Chats archiveChats = tgClient.send(new TdApi.GetChats(new TdApi.ChatListArchive(), Integer.MAX_VALUE))
@@ -194,7 +186,9 @@ public class TgClientService {
             .map(chatId -> tgClient.send(new TdApi.GetChat(chatId)))
             .toList();
 
-        chatsWithInfo.forEach(CompletableFuture::join);
+        for (CompletableFuture<TdApi.Chat> chatCompletableFuture : chatsWithInfo) {
+            chatCompletableFuture.get();
+        }
 
         return chatsWithInfo.stream()
             .map(cf -> {
@@ -208,40 +202,47 @@ public class TgClientService {
             .map(chat -> {
                 String chatPublicName = fetchChannelPublicName(chat);
 
-                return new ChatShort(chat.id, chatPublicName, chat.title);
+                return new ChatInfo(chat.id, chatPublicName, chat.type.getClass().getSimpleName(), chat.title);
             })
             .toList();
     }
 
     @SneakyThrows
-    public TopicShort findTopicByName(long chatId, String topicNamePart) {
+    public List<TopicInfo> findTopicsByName(long chatId, String topicNamePart) {
         return tgClient.send(new TdApi.GetForumTopics(chatId, topicNamePart, 0, 0L, 0L, 100))
-            .thenApply(topics -> {
-                TdApi.ForumTopic topic = Arrays.stream(topics.topics)
-                    .filter(ft -> ft.info.name.equalsIgnoreCase(topicNamePart))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        if (topics.topics.length == 0) {
-                            throw new TgChatsCollectorException("1689", "Не удалось найти топик по имени: " + topicNamePart);
-                        } else {
-                            return topics.topics[0];
-                        }
-                    });
-
-                return new TopicShort(topic.info.isGeneral, topic.info.messageThreadId, topic.info.name, topic.lastMessage.id);
-            })
+            .thenApply(topics -> Arrays.stream(topics.topics)
+                .filter(ft -> org.apache.commons.lang3.StringUtils.containsIgnoreCase(ft.info.name, topicNamePart))
+                .map(topic -> new TopicInfo(topic.info.isGeneral, topic.info.messageThreadId, topic.info.name, topic.lastMessage.id))
+                .toList())
             .get();
     }
 
+    @Nullable
+    @SneakyThrows
+    public TopicInfo findTopicInfoById(long chatId, Long topicId) {
+        if (topicId == null) {
+            return null;
+        }
+
+        return tgClient.send(new TdApi.GetForumTopic(chatId, topicId))
+            .thenApply(topic -> new TopicInfo(topic.info.isGeneral, topic.info.messageThreadId, topic.info.name, topic.lastMessage.id))
+            .get();
+    }
+
+    @SneakyThrows
     public List<ChatInfoDto> findLastChats(Integer count) {
         TdApi.Chats chats = tgClient.send(new TdApi.GetChats(new TdApi.ChatListMain(), count))
-            .join();
+            .get();
 
-        return Arrays.stream(chats.chatIds).boxed()
-            .map(chatId -> tgClient.send(new TdApi.GetChat(chatId)))
-            .map(CompletableFuture::join)
-            .map(chat -> new ChatInfoDto(chat.id, chat.type.getClass().getSimpleName(), chat.title))
-            .toList();
+        List<ChatInfoDto> list = new ArrayList<>();
+        for (long chatId : chats.chatIds) {
+            CompletableFuture<TdApi.Chat> send = tgClient.send(new TdApi.GetChat(chatId));
+            TdApi.Chat chat = send.get();
+            ChatInfoDto chatInfoDto = new ChatInfoDto(chat.id, chat.type.getClass().getSimpleName(), chat.title);
+            list.add(chatInfoDto);
+        }
+
+        return list;
     }
 
     private static Long extractSenderId(TdApi.Message message) {
@@ -254,12 +255,16 @@ public class TgClientService {
         return senderId;
     }
 
-    private String fetchReplyToMessageText(TdApi.Message message) {
+    @Nullable
+    private ReplyToMessage fetchReplyToMessage(TdApi.Message message) {
         if (message.replyTo instanceof TdApi.MessageReplyToMessage replyToMessageInfo) {
             try {
                 TdApi.Message replyToMessage = tgClient.send(new TdApi.GetMessage(replyToMessageInfo.chatId, replyToMessageInfo.messageId))
                     .get();
-                return extractText(replyToMessage.content);
+
+                String messageText = extractMessageTextSafely(replyToMessage.content);
+
+                return new ReplyToMessage(replyToMessage.id, messageText);
             } catch (InterruptedException | ExecutionException e) {
                 return null;
             }
@@ -287,7 +292,7 @@ public class TgClientService {
         return null;
     }
 
-    private TdApi.Messages collectPublicChatMessages(long chatId, TopicShort topic, long fromMessageId) {
+    private TdApi.Messages collectPublicChatMessages(long chatId, TopicInfo topic, long fromMessageId) {
         try {
             // Если это default (general) топик, то читаем вообще все сообщения из чата, и затем будут фильтроваться только те сообщения, которые не относятся ни к одному из топиков
             TdApi.Function<TdApi.Messages> chatHistory = topic != null && !topic.isGeneral()
@@ -306,7 +311,7 @@ public class TgClientService {
         }
     }
 
-    private String extractText(TdApi.MessageContent content) {
+    private String extractMessageTextSafely(TdApi.MessageContent content) {
         if (content instanceof TdApi.MessageVideo messageVideo) {
             return messageVideo.caption.text;
         }
@@ -321,5 +326,8 @@ public class TgClientService {
         }
 
         return null;
+    }
+
+    private record ReplyToMessage(Long id, String text) {
     }
 }

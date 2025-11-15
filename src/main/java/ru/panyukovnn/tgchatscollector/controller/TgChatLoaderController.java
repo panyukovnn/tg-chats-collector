@@ -1,16 +1,21 @@
 package ru.panyukovnn.tgchatscollector.controller;
 
-import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.panyukovnn.tgchatscollector.dto.chathistory.ChatHistoryResponse;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatRequest;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatsResponse;
+import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryResponse;
+import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryRequest;
+import ru.panyukovnn.tgchatscollector.dto.common.CommonRequest;
+import ru.panyukovnn.tgchatscollector.dto.common.CommonResponse;
 import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
 import ru.panyukovnn.tgchatscollector.service.handler.TgCollectorHandler;
-
-import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -19,19 +24,30 @@ public class TgChatLoaderController {
 
     private final TgCollectorHandler tgCollectorHandler;
 
-    @GetMapping("/lastChats")
-    public LastChatsResponse getLastChats(@RequestParam(name = "count", required = false, defaultValue = "10") Integer count) {
-        return tgCollectorHandler.handleLastChats(count);
+    @GetMapping("/last-chats")
+    public CommonResponse<LastChatsResponse> getLastChats(@RequestParam(name = "count", required = false, defaultValue = "10") Integer count) {
+        LastChatsResponse lastChatsResponse = tgCollectorHandler.handleLastChats(count);
+
+        return CommonResponse.<LastChatsResponse>builder()
+            .body(lastChatsResponse)
+            .build();
     }
 
-    @GetMapping("/getChatHistory")
-    public ChatHistoryResponse getChatHistory(@RequestParam(required = false) String publicChatName,
-                                              @RequestParam(required = false) String privateChatNamePart,
-                                              @RequestParam(required = false) String topicNamePart,
-                                              @RequestParam(required = false) Integer limit,
-                                              @Schema(description = "Дата до которой будут извлекаться сообщения, в UTC")
-                                              @RequestParam(required = false) LocalDateTime dateFrom,
-                                              @RequestParam(required = false) LocalDateTime dateTo) {
-        return tgCollectorHandler.handleChatHistory(publicChatName, privateChatNamePart, topicNamePart, limit, dateFrom, dateTo);
+    @PostMapping("/search-chat")
+    public CommonResponse<SearchChatsResponse> postSearchChat(@RequestBody @Valid CommonRequest<SearchChatRequest> request) {
+        SearchChatsResponse searchChatsResponse = tgCollectorHandler.handleFindChat(request.getBody());
+
+        return CommonResponse.<SearchChatsResponse>builder()
+            .body(searchChatsResponse)
+            .build();
+    }
+
+    @PostMapping("/search-chat-history")
+    public CommonResponse<SearchChatHistoryResponse> postSearchChatHistory(@RequestBody @Valid CommonRequest<SearchChatHistoryRequest> searchChatHistory) {
+        SearchChatHistoryResponse searchChatHistoryResponse = tgCollectorHandler.handleSearchChatHistoryByPeriod(searchChatHistory.getBody());
+
+        return CommonResponse.<SearchChatHistoryResponse>builder()
+            .body(searchChatHistoryResponse)
+            .build();
     }
 }

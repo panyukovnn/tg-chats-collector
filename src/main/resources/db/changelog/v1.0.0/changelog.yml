@@ -6,8 +6,5 @@ databaseChangeLog:
         - tagDatabase:
             tag: release/1.0.0
   - include:
-      file: 01.create_subscribed_channels.yml
-      relativeToChangelogFile: true
-  - include:
-      file: 02.create_tg_messages.yml
+      file: 01.create_tg_messages.yml
       relativeToChangelogFile: true
