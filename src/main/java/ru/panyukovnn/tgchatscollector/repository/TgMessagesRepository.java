@@ -43,7 +43,7 @@ public interface TgMessagesRepository extends JpaRepository<TgMessage, UUID> {
     @Modifying
     int deleteAllByChatIdAndTopicIdAndDateTimeFrom(Long chatId, Long topicId, LocalDateTime dateFrom);
 
-    Optional<TgMessage> findByChatIdAndTopicIdAndExternalId(Long chatId, Long topicId, Long externalId);
+    List<TgMessage> findByChatIdAndTopicIdAndExternalId(Long chatId, Long topicId, Long externalId);
 
     @Query("""
         FROM TgMessage m

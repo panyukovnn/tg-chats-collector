@@ -24,16 +24,16 @@ public class TgMessagesDomainService {
      * Сохраняет сообщение в базу данных
      */
     @Transactional
-    public TgMessage saveMessage(Long chatId, Long topicId, TgMessageDto messageDto) {
+    public void saveMessage(Long chatId, Long topicId, TgMessageDto messageDto) {
         // Проверяем, существует ли уже такое сообщение
-        Optional<TgMessage> existing = tgMessagesRepository.findByChatIdAndTopicIdAndExternalId(
+        List<TgMessage> existing = tgMessagesRepository.findByChatIdAndTopicIdAndExternalId(
             chatId, topicId, messageDto.getMessageId()
         );
 
-        if (existing.isPresent()) {
+        if (!existing.isEmpty()) {
             log.debug("Сообщение уже существует: chatId={}, topicId={}, externalId={}",
                 chatId, topicId, messageDto.getMessageId());
-            return existing.get();
+            return;
         }
 
         TgMessage message = TgMessage.builder()
@@ -48,10 +48,9 @@ public class TgMessagesDomainService {
             .replyToMessageId(messageDto.getReplyToMessageId())
             .build();
 
-        TgMessage saved = tgMessagesRepository.save(message);
+        tgMessagesRepository.save(message);
         log.debug("Сохранено сообщение: chatId={}, topicId={}, externalId={}",
             chatId, topicId, messageDto.getMessageId());
-        return saved;
     }
 
     /**
