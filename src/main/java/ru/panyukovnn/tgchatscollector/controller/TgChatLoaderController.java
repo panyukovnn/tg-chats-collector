@@ -8,8 +8,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatRequest;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPublicChannelByIdRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatsResponse;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPrivateChatRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryResponse;
 import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryRequest;
 import ru.panyukovnn.tgchatscollector.dto.common.CommonRequest;
@@ -33,9 +34,18 @@ public class TgChatLoaderController {
             .build();
     }
 
-    @PostMapping("/search-chat")
-    public CommonResponse<SearchChatsResponse> postSearchChat(@RequestBody @Valid CommonRequest<SearchChatRequest> request) {
-        SearchChatsResponse searchChatsResponse = tgCollectorHandler.handleFindChat(request.getBody());
+    @PostMapping("/search-private-chat")
+    public CommonResponse<SearchChatsResponse> postSearchPrivateChat(@RequestBody @Valid CommonRequest<SearchPrivateChatRequest> request) {
+        SearchChatsResponse searchChatsResponse = tgCollectorHandler.handleFindPrivateChat(request.getBody());
+
+        return CommonResponse.<SearchChatsResponse>builder()
+            .body(searchChatsResponse)
+            .build();
+    }
+
+    @PostMapping("/search-public-channel-by-id")
+    public CommonResponse<SearchChatsResponse> postSearchPublicChannelById(@RequestBody @Valid CommonRequest<SearchPublicChannelByIdRequest> request) {
+        SearchChatsResponse searchChatsResponse = tgCollectorHandler.handleFindPublicChannelById(request.getBody());
 
         return CommonResponse.<SearchChatsResponse>builder()
             .body(searchChatsResponse)

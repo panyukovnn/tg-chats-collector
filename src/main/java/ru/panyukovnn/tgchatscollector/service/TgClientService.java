@@ -35,7 +35,7 @@ public class TgClientService {
     private final TgChatLoaderProperty tgChatLoaderProperty;
 
     @SneakyThrows
-    public ChatInfo findChats(Long chatId, String publicChatName) {
+    public ChatInfo searchChats(Long chatId, String publicChatName) {
         if (chatId == null && publicChatName == null) {
             throw new TgChatsCollectorException("46ea", "Отсутствуют chatId и chatName для идентификации чата");
         }
@@ -44,7 +44,10 @@ public class TgClientService {
             ? tgClient.send(new TdApi.GetChat(chatId)).get()
             : tgClient.send(new TdApi.SearchPublicChat(publicChatName)).get();
 
-        return new ChatInfo(chat.id, fetchChannelPublicName(chat), chat.type.getClass().getSimpleName(), chat.title);
+
+        String chatType = defineChatType(chat);
+
+        return new ChatInfo(chat.id, fetchChannelPublicName(chat), chatType, chat.title);
     }
 
     @SneakyThrows
@@ -60,9 +63,9 @@ public class TgClientService {
      * @param privateChatNamePart часть имени приватного чата
      * @return чат
      */
-    public List<ChatInfo> findChats(Long chatId, String publicChatName, String privateChatNamePart) {
+    public List<ChatInfo> searchChats(Long chatId, String publicChatName, String privateChatNamePart) {
         if (chatId != null || StringUtils.hasText(publicChatName)) {
-            return List.of(findChats(chatId, publicChatName));
+            return List.of(searchChats(chatId, publicChatName));
         }
 
         if (privateChatNamePart != null) {
@@ -99,7 +102,7 @@ public class TgClientService {
 
         Long previousFirstMessageId = null;
         Long previousLastMessageId = null;
-        while (messageDtos.size() < limitMessagesToLoad || Thread.interrupted()) {
+        while (messageDtos.size() < limitMessagesToLoad && !Thread.interrupted()) {
             TdApi.Messages messages = collectPublicChatMessages(chatId, topic, fromMessageId);
 
             if (messages.totalCount == 0) {
@@ -124,8 +127,6 @@ public class TgClientService {
             for (TdApi.Message message : messages.messages) {
                 // Если это default топик и сообщение относится к какому-либо из топиков, то его пропускаем
                 if (topic != null && topic.isGeneral() && message.isTopicMessage) {
-                    fromMessageId = messages.messages[messages.messages.length - 1].id;
-
                     continue;
                 }
 
@@ -161,13 +162,10 @@ public class TgClientService {
                     .replyToMessageId(replyToMessage != null ? replyToMessage.id : null)
                     .text(text)
                     .build());
-
-                if (messages.messages.length == 0) {
-                    break;
-                }
-
-                fromMessageId = messages.messages[messages.messages.length - 1].id;
             }
+
+            // Обновляем fromMessageId на последнее сообщение в пачке для загрузки следующей пачки
+            fromMessageId = messages.messages[messages.messages.length - 1].id;
         }
 
         log.info("Извлечено сообщений: {}", messageDtos.size());
@@ -202,7 +200,7 @@ public class TgClientService {
             .map(chat -> {
                 String chatPublicName = fetchChannelPublicName(chat);
 
-                return new ChatInfo(chat.id, chatPublicName, chat.type.getClass().getSimpleName(), chat.title);
+                return new ChatInfo(chat.id, chatPublicName, defineChatType(chat), chat.title);
             })
             .toList();
     }
@@ -326,6 +324,15 @@ public class TgClientService {
         }
 
         return null;
+    }
+
+    private static String defineChatType(TdApi.Chat chat) {
+        return switch (chat.type) {
+            case TdApi.ChatTypePrivate ignored -> "private";
+            case TdApi.ChatTypeBasicGroup ignored -> "group";
+            case TdApi.ChatTypeSupergroup sg -> sg.isChannel ? "channel" : "supergroup";
+            case TdApi.ChatTypeSecret ignored -> "secret";
+        };
     }
 
     private record ReplyToMessage(Long id, String text) {
