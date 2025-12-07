@@ -103,7 +103,7 @@ public class TgClientService {
         Long previousFirstMessageId = null;
         Long previousLastMessageId = null;
         while (messageDtos.size() < limitMessagesToLoad && !Thread.interrupted()) {
-            TdApi.Messages messages = collectPublicChatMessages(chatId, topic, fromMessageId);
+            TdApi.Messages messages = collectChatMessages(chatId, topic, fromMessageId);
 
             if (messages.totalCount == 0) {
                 log.info("Извлечено сообщений: {}", messageDtos.size());
@@ -290,7 +290,7 @@ public class TgClientService {
         return null;
     }
 
-    private TdApi.Messages collectPublicChatMessages(long chatId, TopicInfo topic, long fromMessageId) {
+    private TdApi.Messages collectChatMessages(long chatId, TopicInfo topic, long fromMessageId) {
         try {
             // Если это default (general) топик, то читаем вообще все сообщения из чата, и затем будут фильтроваться только те сообщения, которые не относятся ни к одному из топиков
             TdApi.Function<TdApi.Messages> chatHistory = topic != null && !topic.isGeneral()
