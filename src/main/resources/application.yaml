@@ -6,20 +6,6 @@ server:
 spring:
   application:
     name: tg-chats-collector
-  datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
-    hikari:
-      schema: tg_chats_collector
-      connection-init-sql: CREATE SCHEMA IF NOT EXISTS ${spring.datasource.hikari.schema};
-  liquibase:
-    enabled: true
-    change-log: ./db/changelog/changelog-master.yml
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
 
 tg-collector:
   telegram:
@@ -30,9 +16,6 @@ tg-collector:
   chat-loader:
     default-messages-limit: 2000
     default-days-before-limit: 60
-  integration:
-    conveyor:
-      host: ${INTEGRATION_CONVEYOR_HOST}
 
 logging:
   config: classpath:ru/panyukovnn/referenceloggingstarter/logback-spring.xml
@@ -40,9 +23,3 @@ logging:
   web-logging:
     log-body: true
     log-feign-requests: true
-
-springdoc:
-  swagger-ui:
-    enabled: true
-    tags-sorter: alpha
-  show-actuator: false

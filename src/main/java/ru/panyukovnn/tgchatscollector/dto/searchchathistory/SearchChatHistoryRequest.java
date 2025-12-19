@@ -25,7 +25,4 @@ public class SearchChatHistoryRequest {
     @NotNull
     @Schema(description = "Дата начала периода, в UTC")
     private LocalDateTime dateFrom;
-
-    @Schema(description = "Принудительно перезагрузить историю из Telegram, игнорируя кэш в БД")
-    private Boolean returnFromDb = false;
 }

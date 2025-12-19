@@ -54,3 +54,30 @@
 - написать свой образцовый стартер логгирования для своих же микросервисов
 
 Подготовить план, когда я этот репозиторий выставлю на open source
+
+## TODO
+
+Какое API хочу у tg-chats-collector:
+- выгрузка последних N сообщений (ограничение - 5000 сообщений, а зачем больше?)
+    - выполняем загрузку сразу
+
+## Примеры использования
+
+### Поиск публичного канала по имени
+
+```shell
+curl http://localhost:8083/tg-chats-collector/api/v1/search-public-channel-by-id -H "Content-Type: application/json" -d '{"body":{"publicChatName":"@panyukovnikolay"}}'
+```
+
+```shell
+curl http://localhost:8083/tg-chats-collector/api/v1/search-private-chat -H "Content-Type: application/json" -d '{"body":{"privateChatNamePart":"Посты"}}'
+```
+
+### Поиск истории чата
+```shell
+curl http://localhost:8083/tg-chats-collector/api/v1/search-chat-history -H "Content-Type: application/json" -d '{"body":{"chatId":"-1001823804554","dateFrom":"2020-01-01T00:00:00"}}'
+```
+
+```shell
+curl http://localhost:8083/tg-chats-collector/api/v1/search-chat-history -H "Content-Type: application/json" -d '{"body":{"chatId":"-5066383994","dateFrom":"2020-01-01T00:00:00"}}'
+```

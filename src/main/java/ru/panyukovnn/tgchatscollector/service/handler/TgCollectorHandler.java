@@ -5,21 +5,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
+import ru.panyukovnn.referencemodelstarter.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
-import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPublicChannelByIdRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatsResponse;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPrivateChatRequest;
+import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPublicChannelByIdRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchathistory.SearchChatHistoryResponse;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
 import ru.panyukovnn.tgchatscollector.dto.telegram.TopicInfo;
-import ru.panyukovnn.tgchatscollector.exception.TgChatsCollectorException;
-import ru.panyukovnn.tgchatscollector.mapper.TgMessageMapper;
-import ru.panyukovnn.tgchatscollector.model.TgMessage;
 import ru.panyukovnn.tgchatscollector.service.TgClientService;
-import ru.panyukovnn.tgchatscollector.service.domain.TgMessagesDomainService;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -33,8 +30,6 @@ public class TgCollectorHandler {
     private static final int SEARCH_CHATS_LIMIT = 5;
 
     private final TgClientService tgClientService;
-    private final TgMessageMapper tgMessageMapper;
-    private final TgMessagesDomainService tgMessagesDomainService;
 
     public LastChatsResponse handleLastChats(Integer count) {
         List<ChatInfoDto> lastChatDtos = tgClientService.findLastChats(count);
@@ -49,7 +44,7 @@ public class TgCollectorHandler {
         List<ChatInfo> chats = tgClientService.searchChats(null, null, privateChatNamePart);
 
         if (CollectionUtils.isEmpty(chats)) {
-            throw new TgChatsCollectorException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
+            throw new BusinessException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
         }
 
         return createSearchChatResponse(chats, topicNamePart);
@@ -61,7 +56,7 @@ public class TgCollectorHandler {
         List<ChatInfo> chats = tgClientService.searchChats(null, publicChatName, null);
 
         if (CollectionUtils.isEmpty(chats)) {
-            throw new TgChatsCollectorException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
+            throw new BusinessException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
         }
 
         return createSearchChatResponse(chats, null);
@@ -81,28 +76,9 @@ public class TgCollectorHandler {
         ChatInfo chatInfo = tgClientService.findChatById(chatId);
         TopicInfo topicInfo = tgClientService.findTopicInfoById(chatId, topicId);
 
-        if (Boolean.TRUE.equals(searchChatHistoryRequest.getReturnFromDb())) {
-            List<TgMessageDto> messagesFromDate = tgMessagesDomainService.findMessagesFromDate(chatId, topicId, dateFrom).stream()
-                .sorted(Comparator.comparing(TgMessage::getDateTime))
-                .map(tgMessageMapper::toDto)
-                .toList();
-
-            return SearchChatHistoryResponse.builder()
-                .chatId(chatInfo.chatId())
-                .chatTitle(chatInfo.title())
-                .chatPublicName(chatInfo.chatPublicName())
-                .topicId(topicInfo != null ? topicInfo.topicId() : null)
-                .topicName(topicInfo != null ? topicInfo.title() : null)
-                .totalCount(messagesFromDate.size())
-                .messages(messagesFromDate)
-                .build();
-        }
-
         List<TgMessageDto> messageDtos = tgClientService.collectAllMessagesFromPublicChat(chatId, topicInfo, null, dateFrom, null).stream()
             .sorted(Comparator.comparing(TgMessageDto::getDateTime))
             .toList();
-
-        tgMessagesDomainService.saveMessages(chatId, topicId, messageDtos);
 
         return SearchChatHistoryResponse.builder()
             .chatId(chatInfo.chatId())

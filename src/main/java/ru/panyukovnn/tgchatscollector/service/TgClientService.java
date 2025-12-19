@@ -8,11 +8,11 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import ru.panyukovnn.referencemodelstarter.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
 import ru.panyukovnn.tgchatscollector.dto.telegram.TopicInfo;
-import ru.panyukovnn.tgchatscollector.exception.TgChatsCollectorException;
 import ru.panyukovnn.tgchatscollector.property.TgChatLoaderProperty;
 
 import java.time.LocalDateTime;
@@ -37,7 +37,7 @@ public class TgClientService {
     @SneakyThrows
     public ChatInfo searchChats(Long chatId, String publicChatName) {
         if (chatId == null && publicChatName == null) {
-            throw new TgChatsCollectorException("46ea", "Отсутствуют chatId и chatName для идентификации чата");
+            throw new BusinessException("46ea", "Отсутствуют chatId и chatName для идентификации чата");
         }
 
         TdApi.Chat chat = chatId != null
@@ -332,6 +332,7 @@ public class TgClientService {
             case TdApi.ChatTypeBasicGroup ignored -> "group";
             case TdApi.ChatTypeSupergroup sg -> sg.isChannel ? "channel" : "supergroup";
             case TdApi.ChatTypeSecret ignored -> "secret";
+            default -> "undefined";
         };
     }
 
