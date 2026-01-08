@@ -6,19 +6,22 @@ import it.tdlight.Slf4JLogMessageHandler;
 import it.tdlight.client.*;
 import it.tdlight.jni.TdApi;
 import it.tdlight.util.UnsupportedNativeLibraryException;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Produces;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import io.quarkus.runtime.ShutdownEvent;
 import ru.panyukovnn.tgchatscollector.property.TgCollectorProperty;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
 @Slf4j
-@Configuration
+@ApplicationScoped
 public class TgLightConfig {
 
-    @Bean(destroyMethod = "close")
+    @Produces
+    @ApplicationScoped
     public SimpleTelegramClientFactory simpleTelegramClientFactory() throws UnsupportedNativeLibraryException {
         // Initialize TDLight native libraries
         Init.init();
@@ -29,8 +32,10 @@ public class TgLightConfig {
         return new SimpleTelegramClientFactory();
     }
 
-    @Bean(destroyMethod = "close")
-    public SimpleTelegramClient tgClient(TgCollectorProperty tgCollectorProperty, SimpleTelegramClientFactory simpleTelegramClientFactory) {
+    @Produces
+    @ApplicationScoped
+    public SimpleTelegramClient tgClient(TgCollectorProperty tgCollectorProperty,
+                                         SimpleTelegramClientFactory simpleTelegramClientFactory) {
         APIToken apiToken = new APIToken(tgCollectorProperty.apiId(), tgCollectorProperty.apiHash());
 
         Path sessionPath = Paths.get("tdlight-session");
@@ -47,6 +52,19 @@ public class TgLightConfig {
 //        client.addUpdateHandler(TdApi.UpdateNewMessage.class, this::onUpdateNewMessage);
 
         return client;
+    }
+
+    void onStop(@Observes ShutdownEvent event,
+               SimpleTelegramClient client,
+               SimpleTelegramClientFactory factory) {
+        try {
+            log.info("Closing Telegram client...");
+            client.close();
+            factory.close();
+            log.info("Telegram client closed successfully");
+        } catch (Exception e) {
+            log.error("Error closing Telegram client", e);
+        }
     }
 
     private void onUpdateAuthorizationState(TdApi.UpdateAuthorizationState update) {

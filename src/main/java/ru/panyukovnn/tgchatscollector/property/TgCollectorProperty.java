@@ -1,11 +1,13 @@
 package ru.panyukovnn.tgchatscollector.property;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import io.smallrye.config.ConfigMapping;
 
-@ConfigurationProperties("tg-collector.telegram.client")
-public record TgCollectorProperty (
-    Integer apiId,
-    String apiHash,
-    String phone
-) {
+@ConfigMapping(prefix = "tg-collector.telegram.client")
+public interface TgCollectorProperty {
+
+    Integer apiId();
+
+    String apiHash();
+
+    String phone();
 }

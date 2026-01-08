@@ -1,5 +1,6 @@
 package ru.panyukovnn.tgchatscollector.dto.searchchathistory;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Data;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
@@ -8,6 +9,7 @@ import java.util.List;
 
 @Data
 @Builder
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class SearchChatHistoryResponse {
 
     private Long chatId;

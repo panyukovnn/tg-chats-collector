@@ -1,12 +1,12 @@
 plugins {
     id 'java'
     id 'jacoco'
-    id 'org.springframework.boot' version '3.2.5'
-    id 'io.spring.dependency-management' version '1.1.5'
+    id 'com.palantir.git-version' version '3.1.0'
+    id 'io.quarkus' version "3.17.0"
 }
 
 group = 'ru.panyukovnn'
-version = '1.0.0-RC1'
+version = gitVersion()
 
 java.targetCompatibility = JavaVersion.VERSION_21
 java.sourceCompatibility = JavaVersion.VERSION_21
@@ -15,43 +15,22 @@ repositories {
     mavenLocal()
     mavenCentral()
     maven { url "https://mvn.mchv.eu/repository/mchv/" }
-    maven {
-        url = uri("https://maven.pkg.github.com/PanyukovNN/reference-logging-starter")
-        credentials {
-            username = 'panyukovnn'
-            password = githubPackagesReadToken
-        }
-    }
-    maven {
-        url = uri("https://maven.pkg.github.com/PanyukovNN/reference-model-starter")
-        credentials {
-            username = 'panyukovnn'
-            password = githubPackagesReadToken
-        }
-    }
 }
 
-dependencyManagement {
-    imports {
-        mavenBom "org.springframework.cloud:spring-cloud-dependencies:2023.0.2"
-    }
-}
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation "org.springframework.boot:spring-boot-starter-actuator"
-    implementation "org.springframework.boot:spring-boot-starter-validation"
-
-    implementation "org.springframework.cloud:spring-cloud-starter-openfeign"
-
-    implementation "org.springdoc:springdoc-openapi-data-rest:1.8.0"
-
-    implementation 'ru.panyukovnn:reference-logging-starter:1.0.0-RC4'
-    implementation 'ru.panyukovnn:reference-model-starter:1.0.0'
+    implementation enforcedPlatform("io.quarkus.platform:quarkus-bom:3.17.0")
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-picocli'
+    implementation 'io.quarkus:quarkus-hibernate-validator'
+    implementation 'io.quarkus:quarkus-jackson'
+    implementation 'io.quarkus:quarkus-config-yaml'
 
     implementation 'org.telegram:telegrambots:6.5.0'
     implementation 'org.telegram:telegrambots-meta:6.5.0'
     implementation 'org.telegram:telegrambotsextensions:6.5.0'
+
+    implementation 'io.swagger.core.v3:swagger-annotations:2.2.8'
 
     implementation platform('it.tdlight:tdlight-java-bom:3.4.0+td.1.8.26')
     implementation group: 'it.tdlight', name: 'tdlight-java'
@@ -64,20 +43,14 @@ dependencies {
 
     implementation "org.jsoup:jsoup:1.20.1"
 
-    implementation "net.logstash.logback:logstash-logback-encoder:7.3"
-    implementation "org.codehaus.janino:janino:3.1.9"
-
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    testCompileOnly 'org.projectlombok:lombok'
-    testAnnotationProcessor 'org.projectlombok:lombok'
-
-    implementation 'org.mapstruct:mapstruct:1.5.5.Final'
-    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    testCompileOnly 'org.projectlombok:lombok:1.18.30'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
 
     testImplementation "com.h2database:h2"
-    testImplementation "org.springframework.boot:spring-boot-starter-test"
-    testImplementation "org.springframework.cloud:spring-cloud-contract-wiremock"
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
 }
 
 test {
@@ -106,10 +79,6 @@ jacocoTestCoverageVerification {
     }
 }
 
-bootJar {
-    archiveFileName = "tg-chats-collector.jar"
-}
-
 // Задача для копирования нативных библиотек
 task copyNativeLibs(type: Copy) {
     from {
@@ -126,12 +95,9 @@ task copyNativeLibs(type: Copy) {
     includeEmptyDirs = false
 }
 
-bootJar.dependsOn copyNativeLibs
-
-jar {
-    enabled = false
-}
+quarkusBuild.dependsOn copyNativeLibs
 
 tasks.withType(Test).configureEach {
     systemProperty "file.encoding", "UTF-8"
+    systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
 }

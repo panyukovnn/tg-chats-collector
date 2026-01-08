@@ -43,3 +43,5 @@ bin/
 /tdlight-session/
 /deploy/config.env
 /deploy/application-prom.yaml
+/deploy/application-prod.properties
+.claude

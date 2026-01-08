@@ -3,12 +3,11 @@ package ru.panyukovnn.tgchatscollector.service;
 import it.tdlight.client.SimpleTelegramClient;
 import it.tdlight.jni.TdApi;
 import jakarta.annotation.Nullable;
-import lombok.RequiredArgsConstructor;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-import ru.panyukovnn.referencemodelstarter.exception.BusinessException;
+import ru.panyukovnn.tgchatscollector.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
@@ -27,12 +26,14 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
 
 @Slf4j
-@Service
-@RequiredArgsConstructor
+@ApplicationScoped
 public class TgClientService {
 
-    private final SimpleTelegramClient tgClient;
-    private final TgChatLoaderProperty tgChatLoaderProperty;
+    @Inject
+    SimpleTelegramClient tgClient;
+
+    @Inject
+    TgChatLoaderProperty tgChatLoaderProperty;
 
     @SneakyThrows
     public ChatInfo searchChats(Long chatId, String publicChatName) {
@@ -64,7 +65,7 @@ public class TgClientService {
      * @return чат
      */
     public List<ChatInfo> searchChats(Long chatId, String publicChatName, String privateChatNamePart) {
-        if (chatId != null || StringUtils.hasText(publicChatName)) {
+        if (chatId != null || (publicChatName != null && !publicChatName.isEmpty())) {
             return List.of(searchChats(chatId, publicChatName));
         }
 
@@ -134,7 +135,7 @@ public class TgClientService {
 
                 String text = extractMessageTextSafely(content);
 
-                if (!StringUtils.hasText(text)) {
+                if (text == null || text.isEmpty()) {
                     continue;
                 }
 
@@ -209,7 +210,8 @@ public class TgClientService {
     public List<TopicInfo> findTopicsByName(long chatId, String topicNamePart) {
         return tgClient.send(new TdApi.GetForumTopics(chatId, topicNamePart, 0, 0L, 0L, 100))
             .thenApply(topics -> Arrays.stream(topics.topics)
-                .filter(ft -> org.apache.commons.lang3.StringUtils.containsIgnoreCase(ft.info.name, topicNamePart))
+                .filter(ft -> ft.info.name.toLowerCase()
+                    .contains(topicNamePart.toLowerCase()))
                 .map(topic -> new TopicInfo(topic.info.isGeneral, topic.info.messageThreadId, topic.info.name, topic.lastMessage.id))
                 .toList())
             .get();

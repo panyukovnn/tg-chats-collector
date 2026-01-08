@@ -1,11 +1,9 @@
 package ru.panyukovnn.tgchatscollector.service.handler;
 
-import lombok.RequiredArgsConstructor;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
-import org.springframework.util.StringUtils;
-import ru.panyukovnn.referencemodelstarter.exception.BusinessException;
+import ru.panyukovnn.tgchatscollector.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
@@ -23,13 +21,13 @@ import java.util.Comparator;
 import java.util.List;
 
 @Slf4j
-@Service
-@RequiredArgsConstructor
+@ApplicationScoped
 public class TgCollectorHandler {
 
     private static final int SEARCH_CHATS_LIMIT = 5;
 
-    private final TgClientService tgClientService;
+    @Inject
+    TgClientService tgClientService;
 
     public LastChatsResponse handleLastChats(Integer count) {
         List<ChatInfoDto> lastChatDtos = tgClientService.findLastChats(count);
@@ -43,7 +41,7 @@ public class TgCollectorHandler {
 
         List<ChatInfo> chats = tgClientService.searchChats(null, null, privateChatNamePart);
 
-        if (CollectionUtils.isEmpty(chats)) {
+        if (chats == null || chats.isEmpty()) {
             throw new BusinessException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
         }
 
@@ -55,7 +53,7 @@ public class TgCollectorHandler {
 
         List<ChatInfo> chats = tgClientService.searchChats(null, publicChatName, null);
 
-        if (CollectionUtils.isEmpty(chats)) {
+        if (chats == null || chats.isEmpty()) {
             throw new BusinessException("31ff", "Не удалось найти ни одного чата по заданным параметрам");
         }
 
@@ -99,7 +97,7 @@ public class TgCollectorHandler {
                 chatInfo.setTitle(chat.title());
                 chatInfo.setType(chat.type());
 
-                if (StringUtils.hasText(topicNamePart)) {
+                if (topicNamePart != null && !topicNamePart.isEmpty()) {
                     List<SearchChatsResponse.TopicInfo> topics = tgClientService.findTopicsByName(chat.chatId(), topicNamePart).stream()
                         .map(ts -> new SearchChatsResponse.TopicInfo(ts.topicId(), ts.title()))
                         .toList();

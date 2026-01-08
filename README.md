@@ -1,4 +1,9 @@
 
+План развития:
+- превращаю в cli утилиту
+- создаю стартер, который будет предоставлять апи по вызову cli
+- пишу бота, который будет обращаться к cli тем самым отвечать на вопросы по моим переписка в тг
+
 # tg-chats-collector
 
 Позволяет извлекать историю приватных и публичных чатов в телеграм
@@ -61,23 +66,90 @@
 - выгрузка последних N сообщений (ограничение - 5000 сообщений, а зачем больше?)
     - выполняем загрузку сразу
 
-## Примеры использования
 
-### Поиск публичного канала по имени
+## Сборка проекта
 
 ```shell
-curl http://localhost:8083/tg-chats-collector/api/v1/search-public-channel-by-id -H "Content-Type: application/json" -d '{"body":{"publicChatName":"@panyukovnikolay"}}'
+./gradlew quarkusBuild
 ```
 
+После сборки будет создан исполняемый JAR файл: `build/tg-chats-collector-runner.jar`
+
+## Настройка переменных окружения
+
+Перед запуском необходимо установить переменные окружения для Telegram API, добавить рядом с jar файлом файл application-prod.properties, следующего содрежания:
 ```shell
-curl http://localhost:8083/tg-chats-collector/api/v1/search-private-chat -H "Content-Type: application/json" -d '{"body":{"privateChatNamePart":"Посты"}}'
+TG_CLIENT_API_ID=your_api_id
+TG_CLIENT_API_HASH=your_api_hash
+TG_CLIENT_PHONE=your_phone_number
+```
+
+## Запуск CLI команд
+
+Общий формат:
+```shell
+java -jar build/tg-chats-collector-runner.jar <команда> [опции]
+```
+
+Запуск с указанием профиля:
+```shell
+# Через системное свойство
+java -Dquarkus.profile=localdev -jar build/tg-chats-collector-runner.jar <команда> [опции]
+
+# Через переменную окружения
+QUARKUS_PROFILE=localdev java -jar build/tg-chats-collector-runner.jar <команда> [опции]
+```
+
+Для разработки можно использовать:
+```shell
+./gradlew quarkusDev -Dquarkus.profile=localdev
+```
+
+## Примеры использования
+
+### Справка
+
+Показать список доступных команд:
+```shell
+java -Dquarkus.profile=prod \
+     -Dquarkus.config.locations=./build/application-prod.properties \
+     -Dquarkus.log.console.enable=false \
+     -jar build/tg-chats-collector-runner.jar \
+     --help
+```
+
+### Получить последние N чатов
+
+```shell
+cd build
+java -jar tg-chats-collector-2.0.0-RC2-3-g8b75466.dirty-runner.jar \
+     last-chats -c 100
+```
+
+### Поиск приватного чата
+
+```shell
+cd build
+java -Dquarkus.config.locations=./application-prod.properties \
+     -jar tg-chats-collector-2.0.0-RC2-runner.jar \
+     search-private-chat -n "Посты"
+```
+
+### Поиск публичного канала
+
+```shell
+cd build
+java -Dquarkus.config.locations=./application-prod.properties \
+     -Dquarkus.log.console.enable=false \
+     -jar tg-chats-collector-runner.jar \
+     search-public-channel -n "@panyukovnikolay"
 ```
 
 ### Поиск истории чата
-```shell
-curl http://localhost:8083/tg-chats-collector/api/v1/search-chat-history -H "Content-Type: application/json" -d '{"body":{"chatId":"-1001823804554","dateFrom":"2020-01-01T00:00:00"}}'
-```
 
 ```shell
-curl http://localhost:8083/tg-chats-collector/api/v1/search-chat-history -H "Content-Type: application/json" -d '{"body":{"chatId":"-5066383994","dateFrom":"2020-01-01T00:00:00"}}'
+cd build
+java -Dquarkus.config.locations=./application-prod.properties \
+     -jar tg-chats-collector-2.0.0-RC2-runner.jar \
+     search-history --chat-id 511555429 --from "2025-01-01T00:00:00"
 ```
