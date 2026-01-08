@@ -15,4 +15,4 @@ services:
       - /etc/common-config/config.env
     volumes:
       - ./tdlight-session:/tdlight-session
-      - ./application-prom.yaml:/application-prom.yaml
+      - ./application-prod.yaml:/application-prod.yaml

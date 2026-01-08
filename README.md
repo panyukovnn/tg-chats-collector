@@ -1,8 +1,10 @@
 
 План развития:
-- превращаю в cli утилиту
+- превращаю в cli утилиту (готово)
+- удалить github actions, и сделать простой скрипт сборки деплоя на сервер, описать алгоритм деплоя в README
 - создаю стартер, который будет предоставлять апи по вызову cli
 - пишу бота, который будет обращаться к cli тем самым отвечать на вопросы по моим переписка в тг
+- почистить README
 
 # tg-chats-collector
 
@@ -111,10 +113,8 @@ QUARKUS_PROFILE=localdev java -jar build/tg-chats-collector-runner.jar <кома
 
 Показать список доступных команд:
 ```shell
-java -Dquarkus.profile=prod \
-     -Dquarkus.config.locations=./build/application-prod.properties \
-     -Dquarkus.log.console.enable=false \
-     -jar build/tg-chats-collector-runner.jar \
+cd build
+java -jar tg-chats-collector-3.0.0*-runner.jar \
      --help
 ```
 
@@ -122,7 +122,7 @@ java -Dquarkus.profile=prod \
 
 ```shell
 cd build
-java -jar tg-chats-collector-2.0.0-RC2-3-g8b75466.dirty-runner.jar \
+java -jar tg-chats-collector-3.0.0*-runner.jar \
      last-chats -c 100
 ```
 
@@ -130,8 +130,7 @@ java -jar tg-chats-collector-2.0.0-RC2-3-g8b75466.dirty-runner.jar \
 
 ```shell
 cd build
-java -Dquarkus.config.locations=./application-prod.properties \
-     -jar tg-chats-collector-2.0.0-RC2-runner.jar \
+java -jar tg-chats-collector-3.0.0*-runner.jar \
      search-private-chat -n "Посты"
 ```
 
@@ -139,9 +138,7 @@ java -Dquarkus.config.locations=./application-prod.properties \
 
 ```shell
 cd build
-java -Dquarkus.config.locations=./application-prod.properties \
-     -Dquarkus.log.console.enable=false \
-     -jar tg-chats-collector-runner.jar \
+java -jar tg-chats-collector-3.0.0*-runner.jar \
      search-public-channel -n "@panyukovnikolay"
 ```
 
@@ -149,7 +146,6 @@ java -Dquarkus.config.locations=./application-prod.properties \
 
 ```shell
 cd build
-java -Dquarkus.config.locations=./application-prod.properties \
-     -jar tg-chats-collector-2.0.0-RC2-runner.jar \
-     search-history --chat-id 511555429 --from "2025-01-01T00:00:00"
+java -jar tg-chats-collector-3.0.0*-runner.jar \
+     search-history --chat-id 511555429 --from "2026-01-01T00:00:00"
 ```
