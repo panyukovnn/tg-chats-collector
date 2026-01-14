@@ -15,7 +15,7 @@ quarkus:
   banner:
     enabled: false
   config:
-    locations: application-prod.properties
+    locations: ./application-prod.properties
   log:
     level: INFO
     console:

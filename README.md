@@ -1,9 +1,10 @@
 
 План развития:
-- превращаю в cli утилиту (готово)
-- удалить github actions, и сделать простой скрипт сборки деплоя на сервер, описать алгоритм деплоя в README
-- создаю стартер, который будет предоставлять апи по вызову cli
-- пишу бота, который будет обращаться к cli тем самым отвечать на вопросы по моим переписка в тг
+- ✅превращаю в cli утилиту
+- ✅создать стартер, который будет предоставлять апи по вызову cli
+- ✅удалить github actions, и сделать простой скрипт сборки деплоя на сервер, описать алгоритм деплоя в README
+- пишу бота, который будет обращаться к cli, тем самым отвечать на вопросы по моим перепискам в тг
+- покрыть сервис тестами
 - почистить README
 
 # tg-chats-collector
@@ -62,12 +63,12 @@
 
 Подготовить план, когда я этот репозиторий выставлю на open source
 
-## TODO
+## Деплой на удаленный сервер
 
-Какое API хочу у tg-chats-collector:
-- выгрузка последних N сообщений (ограничение - 5000 сообщений, а зачем больше?)
-    - выполняем загрузку сразу
-
+Запустить скрипт, который выполнит полный цикл сборки и деплоя:
+```shell
+sh deploy/deploy.sh
+```
 
 ## Сборка проекта
 
@@ -111,25 +112,18 @@ QUARKUS_PROFILE=localdev java -jar build/tg-chats-collector-runner.jar <кома
 
 ### Справка
 
-Показать список доступных команд:
-```shell
-cd build
-java -jar tg-chats-collector-3.0.0*-runner.jar \
-     --help
-```
-
 ### Получить последние N чатов
 
 ```shell
-cd build
+cd ~/dev/shell-services/tg-chats-collector
 java -jar tg-chats-collector-3.0.0*-runner.jar \
-     last-chats -c 100
+     last-chats -c 10
 ```
 
 ### Поиск приватного чата
 
 ```shell
-cd build
+cd ~/dev/shell-services/tg-chats-collector
 java -jar tg-chats-collector-3.0.0*-runner.jar \
      search-private-chat -n "Посты"
 ```
@@ -137,7 +131,7 @@ java -jar tg-chats-collector-3.0.0*-runner.jar \
 ### Поиск публичного канала
 
 ```shell
-cd build
+cd ~/dev/shell-services/tg-chats-collector
 java -jar tg-chats-collector-3.0.0*-runner.jar \
      search-public-channel -n "@panyukovnikolay"
 ```
@@ -145,7 +139,7 @@ java -jar tg-chats-collector-3.0.0*-runner.jar \
 ### Поиск истории чата
 
 ```shell
-cd build
+cd ~/dev/shell-services/tg-chats-collector
 java -jar tg-chats-collector-3.0.0*-runner.jar \
      search-history --chat-id 511555429 --from "2026-01-01T00:00:00"
 ```
