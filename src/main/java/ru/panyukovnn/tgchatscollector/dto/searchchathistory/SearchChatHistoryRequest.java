@@ -22,7 +22,12 @@ public class SearchChatHistoryRequest {
     @Schema(description = "Идентификатор топика")
     private Long topicId;
 
-    @NotNull
+    @Schema(description = "Предельное количество сообщений")
+    private Integer limit;
+
     @Schema(description = "Дата начала периода, в UTC")
     private LocalDateTime dateFrom;
+
+    @Schema(description = "Дата окончания периода, в UTC")
+    private LocalDateTime dateTo;
 }

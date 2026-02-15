@@ -69,12 +69,14 @@ public class TgCollectorHandler {
     public SearchChatHistoryResponse handleSearchChatHistoryByPeriod(SearchChatHistoryRequest searchChatHistoryRequest) {
         Long chatId = searchChatHistoryRequest.getChatId();
         Long topicId = searchChatHistoryRequest.getTopicId();
+        Integer limit = searchChatHistoryRequest.getLimit();
         LocalDateTime dateFrom = searchChatHistoryRequest.getDateFrom();
+        LocalDateTime dateTo = searchChatHistoryRequest.getDateTo();
 
         ChatInfo chatInfo = tgClientService.findChatById(chatId);
         TopicInfo topicInfo = tgClientService.findTopicInfoById(chatId, topicId);
 
-        List<TgMessageDto> messageDtos = tgClientService.collectAllMessagesFromPublicChat(chatId, topicInfo, null, dateFrom, null).stream()
+        List<TgMessageDto> messageDtos = tgClientService.collectMessages(chatId, topicInfo, limit, dateFrom, dateTo).stream()
             .sorted(Comparator.comparing(TgMessageDto::getDateTime))
             .toList();
 

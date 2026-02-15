@@ -32,11 +32,22 @@ public class SearchChatHistoryCommand implements Runnable {
     Long topicId;
 
     @CommandLine.Option(
+        names = {"--limit"},
+        description = "Предельное количество сообщений"
+    )
+    Integer limit;
+
+    @CommandLine.Option(
         names = {"--from"},
-        description = "Дата начала периода в формате ISO (yyyy-MM-ddTHH:mm:ss), в UTC",
-        required = true
+        description = "Дата начала периода в формате ISO (yyyy-MM-ddTHH:mm:ss), в UTC"
     )
     String dateFromStr;
+
+    @CommandLine.Option(
+        names = {"--to"},
+        description = "Дата окончания периода в формате ISO (yyyy-MM-ddTHH:mm:ss), в UTC"
+    )
+    String dateToStr;
 
     @Inject
     TgCollectorHandler tgCollectorHandler;
@@ -47,18 +58,23 @@ public class SearchChatHistoryCommand implements Runnable {
     @Override
     public void run() {
         try {
-            log.info("Executing search-history command with chatId={}, topicId={}, from={}",
-                    chatId, topicId, dateFromStr);
+            log.info("Executing search-history command with chatId={}, topicId={}, limit={}, from={}, to={}",
+                    chatId, topicId, limit, dateFromStr, dateToStr);
 
-            LocalDateTime dateFrom = LocalDateTime.parse(
-                dateFromStr,
-                DateTimeFormatter.ISO_LOCAL_DATE_TIME
-            );
+            LocalDateTime dateFrom = dateFromStr != null
+                ? LocalDateTime.parse(dateFromStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                : null;
+
+            LocalDateTime dateTo = dateToStr != null
+                ? LocalDateTime.parse(dateToStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                : null;
 
             SearchChatHistoryRequest request = SearchChatHistoryRequest.builder()
                 .chatId(chatId)
                 .topicId(topicId)
+                .limit(limit)
                 .dateFrom(dateFrom)
+                .dateTo(dateTo)
                 .build();
 
             SearchChatHistoryResponse response = tgCollectorHandler.handleSearchChatHistoryByPeriod(request);

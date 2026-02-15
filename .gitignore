@@ -39,10 +39,11 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-**application-localdev.properties
+**application-localdev.yaml
 /tdlight-session/
 /deploy/config.env
 /deploy/application-prod.yaml
 /deploy/application-prod.properties
+/deploy/local/
 .claude
 /deploy/application-prod.yaml

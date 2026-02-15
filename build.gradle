@@ -17,7 +17,6 @@ repositories {
     maven { url "https://mvn.mchv.eu/repository/mchv/" }
 }
 
-
 dependencies {
     implementation enforcedPlatform("io.quarkus.platform:quarkus-bom:3.17.0")
     implementation 'io.quarkus:quarkus-arc'

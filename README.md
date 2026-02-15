@@ -6,6 +6,8 @@
 - пишу бота, который будет обращаться к cli, тем самым отвечать на вопросы по моим перепискам в тг
 - покрыть сервис тестами
 - почистить README
+- надо локально научиться тестировать этот сервис, без деплоя
+- сейчас как-то неправильно разбито на 2 команды поиска до определенной даты, и поиска по лимиту, я не понимаю как лучше пользоваться...
 
 # tg-chats-collector
 
@@ -141,5 +143,11 @@ java -jar tg-chats-collector-3.0.0*-runner.jar \
 ```shell
 cd ~/dev/shell-services/tg-chats-collector
 java -jar tg-chats-collector-3.0.0*-runner.jar \
-     search-history --chat-id 511555429 --from "2026-01-01T00:00:00"
+     search-history --chat-id -437083490 --from "2026-01-01T00:00:00"
+```
+
+```shell
+cd ~/dev/shell-services/tg-chats-collector
+java -jar tg-chats-collector-3.0.0*-runner.jar \
+     search-history --chat-id -1001823804554 --limit 10
 ```

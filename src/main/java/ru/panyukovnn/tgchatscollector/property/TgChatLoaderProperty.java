@@ -14,4 +14,10 @@ public interface TgChatLoaderProperty {
      * Количество дней за которые будут извлечены сообщения из чата
      */
     Integer defaultDaysBeforeLimit();
+
+    /**
+     * Максимальное количество сообщений при загрузке по диапазону дат
+     */
+    Integer dateRangeMessagesLimit();
+
 }

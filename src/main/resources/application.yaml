@@ -8,6 +8,7 @@ tg-collector:
   chat-loader:
     default-messages-limit: 2000
     default-days-before-limit: 60
+    date-range-messages-limit: 1000
 
 quarkus:
   application:

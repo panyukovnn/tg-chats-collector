@@ -7,20 +7,21 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import ru.panyukovnn.tgchatscollector.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
 import ru.panyukovnn.tgchatscollector.dto.telegram.TopicInfo;
+import ru.panyukovnn.tgchatscollector.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.property.TgChatLoaderProperty;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
@@ -77,6 +78,7 @@ public class TgClientService {
     }
 
     /**
+     * Фасадный метод для сбора сообщений из чата
      * Важно, чтобы даты передавались в UTC
      *
      * @param chatId   идентификатор чата
@@ -86,92 +88,212 @@ public class TgClientService {
      * @param dateTo   дата окончания периода в UTC
      * @return список сообщений из чата
      */
-    public List<TgMessageDto> collectAllMessagesFromPublicChat(Long chatId,
-                                                               TopicInfo topic,
-                                                               @Nullable Integer limit,
-                                                               @Nullable LocalDateTime dateFrom,
-                                                               @Nullable LocalDateTime dateTo) {
-        if (limit == null && dateFrom == null) {
-            // Если не заданы ограничения, то задаем дефолтный лимит
-            limit = tgChatLoaderProperty.defaultMessagesLimit();
+    @SneakyThrows
+    public List<TgMessageDto> collectMessages(Long chatId,
+                                              TopicInfo topic,
+                                              @Nullable Integer limit,
+                                              @Nullable LocalDateTime dateFrom,
+                                              @Nullable LocalDateTime dateTo) {
+        // Открываем чат, чтобы TDLib синхронизировал последние сообщения из облака
+        tgClient.send(new TdApi.OpenChat(chatId)).get();
+
+        try {
+            if (dateFrom != null) {
+                return collectMessagesByDateRange(chatId, topic, 0L, dateFrom, dateTo);
+            }
+
+            int effectiveLimit = limit != null ? limit : tgChatLoaderProperty.defaultMessagesLimit();
+
+            return collectMessagesByLimit(chatId, topic, 0L, effectiveLimit);
+        } finally {
+            tgClient.send(new TdApi.CloseChat(chatId)).get();
+        }
+    }
+
+
+    /**
+     * Собирает последние N сообщений из чата
+     *
+     * @param chatId идентификатор чата
+     * @param topic  топик (может быть null)
+     * @param limit  количество сообщений для сбора
+     * @return список сообщений
+     */
+    public List<TgMessageDto> collectMessagesByLimit(Long chatId, TopicInfo topic, long lastMessageId, int limit) {
+        List<TgMessageDto> result = new ArrayList<>();
+        Set<Long> loadedMessageIds = new HashSet<>();
+        long fromMessageId = lastMessageId;
+
+        while (result.size() < limit && !Thread.interrupted()) {
+            TdApi.Messages messages = fetchChatMessagesBatch(chatId, topic, fromMessageId);
+
+            if (isEmptyBatch(messages)) {
+                log.info("Достигнут конец истории чата, собрано сообщений: {}", result.size());
+
+                break;
+            }
+
+            long oldestMessageIdInBatch = processMessagesBatch(
+                messages, topic, null, null, limit, result, loadedMessageIds
+            );
+
+            if (oldestMessageIdInBatch == fromMessageId) {
+                log.info("Пагинация завершена, нет новых сообщений, собрано: {}", result.size());
+
+                break;
+            }
+
+            fromMessageId = oldestMessageIdInBatch;
+            log.debug("Загружена пачка из {} сообщений, всего собрано: {}", messages.messages.length, result.size());
         }
 
-        List<TgMessageDto> messageDtos = new ArrayList<>();
-        long fromMessageId = 0L;
+        log.info("Сбор сообщений завершен, всего извлечено: {}", result.size());
 
-        int limitMessagesToLoad = limit == null ? Integer.MAX_VALUE : limit;
+        return result;
+    }
 
-        Long previousFirstMessageId = null;
-        Long previousLastMessageId = null;
-        while (messageDtos.size() < limitMessagesToLoad && !Thread.interrupted()) {
-            TdApi.Messages messages = collectChatMessages(chatId, topic, fromMessageId);
+    /**
+     * Собирает сообщения за указанный период
+     *
+     * @param chatId   идентификатор чата
+     * @param topic    топик (может быть null)
+     * @param dateFrom дата начала периода в UTC (включительно)
+     * @param dateTo   дата окончания периода в UTC (включительно, может быть null)
+     * @return список сообщений за период
+     */
+    // TODO здесь тоже нужен лимит
+    public List<TgMessageDto> collectMessagesByDateRange(Long chatId,
+                                                         TopicInfo topic,
+                                                         long lastMessageId,
+                                                         LocalDateTime dateFrom,
+                                                         @Nullable LocalDateTime dateTo) {
+        List<TgMessageDto> result = new ArrayList<>();
+        Set<Long> loadedMessageIds = new HashSet<>();
+        long fromMessageId = lastMessageId;
+        boolean reachedDateFrom = false;
 
-            if (messages.totalCount == 0) {
-                log.info("Извлечено сообщений: {}", messageDtos.size());
+        while (!reachedDateFrom && !Thread.interrupted()) {
+            TdApi.Messages messages = fetchChatMessagesBatch(chatId, topic, fromMessageId);
 
-                return messageDtos;
+            if (isEmptyBatch(messages)) {
+                log.info("Достигнут конец истории чата, собрано сообщений: {}", result.size());
+
+                break;
             }
 
-            // Проверяем что выгрузилась новая группа сообщений
-            long firstMessageId = messages.messages[0].id;
-            long lastMessageId = messages.messages[messages.messages.length - 1].id;
-            if (Objects.equals(firstMessageId, previousFirstMessageId) && Objects.equals(lastMessageId, previousLastMessageId)) {
-                log.info("Извлечено сообщений: {}", messageDtos.size());
+            long oldestMessageIdInBatch = processMessagesBatch(
+                messages, topic, dateFrom, dateTo, Integer.MAX_VALUE, result, loadedMessageIds
+            );
 
-                return messageDtos;
-            }
-            previousFirstMessageId = firstMessageId;
-            previousLastMessageId = lastMessageId;
+            // Проверяем, достигли ли мы даты начала периода
+            TdApi.Message oldestMessage = messages.messages[messages.messages.length - 1];
+            LocalDateTime oldestMessageDate = LocalDateTime.ofEpochSecond(oldestMessage.date, 0, ZoneOffset.UTC);
 
-            log.info("Загружено сообщений в пачке: {}", messages.messages.length);
-
-            for (TdApi.Message message : messages.messages) {
-                // Если это default топик и сообщение относится к какому-либо из топиков, то его пропускаем
-                if (topic != null && topic.isGeneral() && message.isTopicMessage) {
-                    continue;
-                }
-
-                TdApi.MessageContent content = message.content;
-
-                String text = extractMessageTextSafely(content);
-
-                if (text == null || text.isEmpty()) {
-                    continue;
-                }
-
-                LocalDateTime messageDateTimeUtc = LocalDateTime.ofEpochSecond(message.date, 0, ZoneOffset.UTC);
-                LocalDateTime messageDateTime = messageDateTimeUtc
-                    .plusHours(3); // Московское время
-
-                if (dateFrom != null && messageDateTimeUtc.isBefore(dateFrom)) {
-                    log.info("Извлечено сообщений: {}", messageDtos.size());
-
-                    return messageDtos;
-                }
-
-                if (dateTo != null && messageDateTimeUtc.isAfter(dateTo)) {
-                    continue;
-                }
-
-                ReplyToMessage replyToMessage = fetchReplyToMessage(message);
-
-                messageDtos.add(TgMessageDto.builder()
-                    .senderId(extractSenderId(message))
-                    .dateTime(messageDateTime)
-                    .messageId(message.id)
-                    .replyToText(replyToMessage != null ? replyToMessage.text : null)
-                    .replyToMessageId(replyToMessage != null ? replyToMessage.id : null)
-                    .text(text)
-                    .build());
+            if (oldestMessageDate.isBefore(dateFrom)) {
+                reachedDateFrom = true;
+                log.info("Достигнута дата начала периода: {}", dateFrom);
             }
 
-            // Обновляем fromMessageId на последнее сообщение в пачке для загрузки следующей пачки
-            fromMessageId = messages.messages[messages.messages.length - 1].id;
+            if (oldestMessageIdInBatch == fromMessageId) {
+                log.info("Пагинация завершена, нет новых сообщений, собрано: {}", result.size());
+
+                break;
+            }
+
+            fromMessageId = oldestMessageIdInBatch;
+            log.debug("Загружена пачка, всего собрано: {}", result.size());
         }
 
-        log.info("Извлечено сообщений: {}", messageDtos.size());
+        log.info("Сбор сообщений за период завершен, извлечено: {}", result.size());
 
-        return messageDtos;
+        return result;
+    }
+
+    /**
+     * Обрабатывает пачку сообщений и добавляет подходящие в результат
+     *
+     * @return ID самого старого сообщения в пачке для пагинации
+     */
+    private long processMessagesBatch(TdApi.Messages messages,
+                                      TopicInfo topic,
+                                      @Nullable LocalDateTime dateFrom,
+                                      @Nullable LocalDateTime dateTo,
+                                      int limit,
+                                      List<TgMessageDto> result,
+                                      Set<Long> loadedMessageIds) {
+        for (TdApi.Message message : messages.messages) {
+            if (result.size() >= limit) {
+                break;
+            }
+
+            if (loadedMessageIds.contains(message.id)) {
+                continue;
+            }
+
+            loadedMessageIds.add(message.id);
+
+            if (!isMessageFromTopic(message, topic)) {
+                continue;
+            }
+
+            LocalDateTime messageDateUtc = LocalDateTime.ofEpochSecond(message.date, 0, ZoneOffset.UTC);
+
+            if (dateFrom != null && messageDateUtc.isBefore(dateFrom)) {
+                continue;
+            }
+
+            if (dateTo != null && messageDateUtc.isAfter(dateTo)) {
+                continue;
+            }
+
+            TgMessageDto messageDto = mapToMessageDto(message);
+            result.add(messageDto);
+        }
+
+        return messages.messages[messages.messages.length - 1].id;
+    }
+
+    /**
+     * Проверяет, относится ли сообщение к указанному топику
+     */
+    private boolean isMessageFromTopic(TdApi.Message message, TopicInfo topic) {
+        if (topic == null) {
+            return true;
+        }
+
+        // Если это general топик, пропускаем сообщения из других топиков
+        if (topic.isGeneral()) {
+            return !message.isTopicMessage;
+        }
+
+        return true;
+    }
+
+    /**
+     * Преобразует TdApi.Message в TgMessageDto
+     *
+     * @return DTO сообщения или null, если сообщение не содержит текста
+     */
+    private TgMessageDto mapToMessageDto(TdApi.Message message) {
+        String text = extractMessageTextSafely(message.content);
+
+        LocalDateTime messageDateTimeUtc = LocalDateTime.ofEpochSecond(message.date, 0, ZoneOffset.UTC);
+        LocalDateTime messageDateTime = messageDateTimeUtc.plusHours(3); // Московское время
+
+        ReplyToMessage replyToMessage = fetchReplyToMessage(message);
+
+        return TgMessageDto.builder()
+            .senderId(extractSenderId(message))
+            .dateTime(messageDateTime)
+            .messageId(message.id)
+            .replyToText(replyToMessage != null ? replyToMessage.text : null)
+            .replyToMessageId(replyToMessage != null ? replyToMessage.id : null)
+            .text(text)
+            .build();
+    }
+
+    private boolean isEmptyBatch(TdApi.Messages messages) {
+        return messages == null || messages.messages == null || messages.messages.length == 0;
     }
 
     @SneakyThrows
@@ -292,9 +414,17 @@ public class TgClientService {
         return null;
     }
 
-    private TdApi.Messages collectChatMessages(long chatId, TopicInfo topic, long fromMessageId) {
+    /**
+     * Загружает пачку сообщений из чата для пагинации
+     *
+     * @param chatId        идентификатор чата
+     * @param topic         топик (может быть null)
+     * @param fromMessageId ID сообщения, с которого начинать загрузку (0 для последних сообщений)
+     * @return пачка сообщений
+     */
+    private TdApi.Messages fetchChatMessagesBatch(long chatId, TopicInfo topic, long fromMessageId) {
         try {
-            // Если это default (general) топик, то читаем вообще все сообщения из чата, и затем будут фильтроваться только те сообщения, которые не относятся ни к одному из топиков
+            // Если это general топик, читаем все сообщения и фильтруем те, что не в топиках
             TdApi.Function<TdApi.Messages> chatHistory = topic != null && !topic.isGeneral()
                 ? new TdApi.GetMessageThreadHistory(chatId, topic.lastMessageId(), fromMessageId, 0, 100)
                 : new TdApi.GetChatHistory(chatId, fromMessageId, 0, 100, false);
@@ -312,30 +442,71 @@ public class TgClientService {
     }
 
     private String extractMessageTextSafely(TdApi.MessageContent content) {
-        if (content instanceof TdApi.MessageVideo messageVideo) {
-            return messageVideo.caption.text;
-        }
-        if (content instanceof TdApi.MessagePhoto photo) {
-            return photo.caption.text;
-        }
-        if (content instanceof TdApi.MessageAudio audio) {
-            return audio.caption.text;
-        }
         if (content instanceof TdApi.MessageText messageText) {
             return messageText.text.text;
         }
 
-        return null;
+        if (content instanceof TdApi.MessagePhoto photo) {
+            return buildMediaText("<Приложено фото>", photo.caption.text);
+        }
+
+        if (content instanceof TdApi.MessageVideo messageVideo) {
+            return buildMediaText("<Приложено видео>", messageVideo.caption.text);
+        }
+
+        if (content instanceof TdApi.MessageAudio audio) {
+            return buildMediaText("<Приложено аудио>", audio.caption.text);
+        }
+
+        if (content instanceof TdApi.MessageDocument document) {
+            return buildMediaText("<Приложен документ>", document.caption.text);
+        }
+
+        if (content instanceof TdApi.MessageVoiceNote voiceNote) {
+            return buildMediaText("<Приложено голосовое сообщение>", voiceNote.caption.text);
+        }
+
+        if (content instanceof TdApi.MessageVideoNote) {
+            return "<Приложено видеосообщение>";
+        }
+
+        if (content instanceof TdApi.MessageSticker) {
+            return "<Приложен стикер>";
+        }
+
+        if (content instanceof TdApi.MessageAnimation animation) {
+            return buildMediaText("<Приложена анимация>", animation.caption.text);
+        }
+
+        return "<Неизвестный тип сообщения>";
+    }
+
+    private String buildMediaText(String mediaLabel, String caption) {
+        if (caption == null || caption.isEmpty()) {
+            return mediaLabel;
+        }
+
+        return mediaLabel + "\n" + caption;
     }
 
     private static String defineChatType(TdApi.Chat chat) {
-        return switch (chat.type) {
-            case TdApi.ChatTypePrivate ignored -> "private";
-            case TdApi.ChatTypeBasicGroup ignored -> "group";
-            case TdApi.ChatTypeSupergroup sg -> sg.isChannel ? "channel" : "supergroup";
-            case TdApi.ChatTypeSecret ignored -> "secret";
-            default -> "undefined";
-        };
+        if (chat.type instanceof TdApi.ChatTypePrivate) {
+            return "private";
+        }
+
+        if (chat.type instanceof TdApi.ChatTypeBasicGroup) {
+            return "group";
+        }
+
+        if (chat.type instanceof TdApi.ChatTypeSupergroup sg) {
+            return sg.isChannel ? "channel" : "supergroup";
+        }
+
+        if (chat.type instanceof TdApi.ChatTypeSecret) {
+            return "secret";
+        }
+
+        return "undefined";
     }
 
     private record ReplyToMessage(Long id, String text) {

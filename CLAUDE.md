@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+Stack:
+- Java 21
+- Spring Boot 3
+- Gradle
 
 # Java AI Rules for code generation
 
