@@ -4,12 +4,13 @@
 - ✅создать стартер, который будет предоставлять апи по вызову cli
 - ✅удалить github actions, и сделать простой скрипт сборки деплоя на сервер, описать алгоритм деплоя в README
 - ✅пишу бота, который будет обращаться к cli, тем самым отвечать на вопросы по моим перепискам в тг
-- превратить бота обратно в web сервер, но с quarkus и вынесением контракта в отдельный репозиторий
+- ✅превратить бота обратно в web сервер, но с quarkus и вынесением контракта в отдельный репозиторий
+- задеплоить на сервер обновленный вариант
+- сейчас как-то неправильно разбито на 2 команды поиска до определенной даты, и поиска по лимиту, я не понимаю как лучше пользоваться...
+- прикладывать изображения в base64
 - покрыть сервис тестами
 - почистить README
 - надо локально научиться тестировать этот сервис, без деплоя
-- сейчас как-то неправильно разбито на 2 команды поиска до определенной даты, и поиска по лимиту, я не понимаю как лучше пользоваться...
-- прикладывать изображения в base64
 
 # tg-chats-collector
 
@@ -91,20 +92,19 @@ TG_CLIENT_API_HASH=your_api_hash
 TG_CLIENT_PHONE=your_phone_number
 ```
 
-## Запуск CLI команд
+## Запуск
 
-Общий формат:
 ```shell
-java -jar build/tg-chats-collector-runner.jar <команда> [опции]
+java -jar build/tg-chats-collector-runner.jar
 ```
 
 Запуск с указанием профиля:
 ```shell
 # Через системное свойство
-java -Dquarkus.profile=localdev -jar build/tg-chats-collector-runner.jar <команда> [опции]
+java -Dquarkus.profile=localdev -jar build/tg-chats-collector-runner.jar
 
 # Через переменную окружения
-QUARKUS_PROFILE=localdev java -jar build/tg-chats-collector-runner.jar <команда> [опции]
+QUARKUS_PROFILE=localdev java -jar build/tg-chats-collector-runner.jar
 ```
 
 Для разработки можно использовать:
@@ -112,44 +112,44 @@ QUARKUS_PROFILE=localdev java -jar build/tg-chats-collector-runner.jar <кома
 ./gradlew quarkusDev -Dquarkus.profile=localdev
 ```
 
-## Примеры использования
+## REST API
 
-### Справка
+Базовый URL: `http://localhost:8083/tg-chats-collector`
 
 ### Получить последние N чатов
 
 ```shell
-cd ~/dev/shell-services/tg-chats-collector
-java -jar tg-chats-collector-3.0.0*-runner.jar \
-     last-chats -c 10
+curl "http://localhost:8083/tg-chats-collector/api/v1/chats/last?count=10"
 ```
 
 ### Поиск приватного чата
 
 ```shell
-cd ~/dev/shell-services/tg-chats-collector
-java -jar tg-chats-collector-3.0.0*-runner.jar \
-     search-private-chat -n "Посты"
+curl -X POST http://localhost:8083/tg-chats-collector/api/v1/chats/search-private \
+     -H "Content-Type: application/json" \
+     -d '{"privateChatNamePart": "Посты"}'
 ```
 
 ### Поиск публичного канала
 
 ```shell
-cd ~/dev/shell-services/tg-chats-collector
-java -jar tg-chats-collector-3.0.0*-runner.jar \
-     search-public-channel -n "@panyukovnikolay"
+curl -X POST http://localhost:8083/tg-chats-collector/api/v1/chats/search-public \
+     -H "Content-Type: application/json" \
+     -d '{"publicChatName": "@panyukovnikolay"}'
 ```
 
 ### Поиск истории чата
 
+По дате:
 ```shell
-cd ~/dev/shell-services/tg-chats-collector
-java -jar tg-chats-collector-3.0.0*-runner.jar \
-     search-history --chat-id -437083490 --from "2026-01-01T00:00:00"
+curl -X POST http://localhost:8083/tg-chats-collector/api/v1/chat-history/search \
+     -H "Content-Type: application/json" \
+     -d '{"chatId": -437083490, "dateFrom": "2026-01-01T00:00:00"}'
 ```
 
+По лимиту:
 ```shell
-cd ~/dev/shell-services/tg-chats-collector
-java -jar tg-chats-collector-3.0.0*-runner.jar \
-     search-history --chat-id -1001823804554 --limit 10
+curl -X POST http://localhost:8083/tg-chats-collector/api/v1/chat-history/search \
+     -H "Content-Type: application/json" \
+     -d '{"chatId": -1001823804554, "limit": 10}'
 ```

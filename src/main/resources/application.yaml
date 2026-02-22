@@ -15,6 +15,7 @@ quarkus:
     name: tg-chats-collector
   http:
     port: 8083
+    root-path: /${quarkus.application.name}
   banner:
     enabled: false
   config:

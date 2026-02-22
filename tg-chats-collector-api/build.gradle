@@ -26,7 +26,7 @@ publishing {
         maven(MavenPublication) {
             groupId = 'ru.panyukovnn'
             artifactId = 'tg-chats-collector-api'
-            version = project.getVersion()
+            version = rootProject.getVersion()
 
             from components.java
         }
