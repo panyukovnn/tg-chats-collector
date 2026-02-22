@@ -98,11 +98,11 @@ public class TgClientService {
         tgClient.send(new TdApi.OpenChat(chatId)).get();
 
         try {
-            if (dateFrom != null) {
-                return collectMessagesByDateRange(chatId, topic, 0L, dateFrom, dateTo);
-            }
-
             int effectiveLimit = limit != null ? limit : tgChatLoaderProperty.defaultMessagesLimit();
+
+            if (dateFrom != null) {
+                return collectMessagesByDateRange(chatId, topic, 0L, effectiveLimit, dateFrom, dateTo);
+            }
 
             return collectMessagesByLimit(chatId, topic, 0L, effectiveLimit);
         } finally {
@@ -153,18 +153,19 @@ public class TgClientService {
     }
 
     /**
-     * Собирает сообщения за указанный период
+     * Собирает сообщения за указанный период с ограничением по количеству
      *
      * @param chatId   идентификатор чата
      * @param topic    топик (может быть null)
+     * @param limit    предельное количество сообщений
      * @param dateFrom дата начала периода в UTC (включительно)
      * @param dateTo   дата окончания периода в UTC (включительно, может быть null)
      * @return список сообщений за период
      */
-    // TODO здесь тоже нужен лимит
     public List<TgMessageDto> collectMessagesByDateRange(Long chatId,
                                                          TopicInfo topic,
                                                          long lastMessageId,
+                                                         int limit,
                                                          LocalDateTime dateFrom,
                                                          @Nullable LocalDateTime dateTo) {
         List<TgMessageDto> result = new ArrayList<>();
@@ -172,7 +173,7 @@ public class TgClientService {
         long fromMessageId = lastMessageId;
         boolean reachedDateFrom = false;
 
-        while (!reachedDateFrom && !Thread.interrupted()) {
+        while (!reachedDateFrom && result.size() < limit && !Thread.interrupted()) {
             TdApi.Messages messages = fetchChatMessagesBatch(chatId, topic, fromMessageId);
 
             if (isEmptyBatch(messages)) {
@@ -182,7 +183,7 @@ public class TgClientService {
             }
 
             long oldestMessageIdInBatch = processMessagesBatch(
-                messages, topic, dateFrom, dateTo, Integer.MAX_VALUE, result, loadedMessageIds
+                messages, topic, dateFrom, dateTo, limit, result, loadedMessageIds
             );
 
             // Проверяем, достигли ли мы даты начала периода
