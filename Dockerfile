@@ -1,5 +1,5 @@
-# Используем официальный образ Gradle с JDK 17
-FROM gradle:8.10-jdk17 AS build_image
+# Используем официальный образ Gradle с JDK 21
+FROM gradle:8.10-jdk21 AS build_image
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
@@ -9,6 +9,7 @@ ARG GH_TOKEN
 
 # Копируем файлы конфигурации для кеширования зависимостей
 COPY build.gradle settings.gradle ./
+COPY tg-chats-collector-api/build.gradle ./tg-chats-collector-api/
 
 # Прокидываем токен в gradle.properties
 RUN mkdir -p ~/.gradle && \
@@ -16,13 +17,14 @@ RUN mkdir -p ~/.gradle && \
 
 # Копируем исходный код
 COPY src ./src
+COPY tg-chats-collector-api/src ./tg-chats-collector-api/src
 
 # Собираем приложение
 RUN gradle build -x test --no-daemon
 
 
 # Runtime образ
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 
 # Создаем директории для нативных библиотек
 RUN mkdir -p /app/lib

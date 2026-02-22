@@ -13,6 +13,8 @@ tg-collector:
 quarkus:
   application:
     name: tg-chats-collector
+  http:
+    port: 8083
   banner:
     enabled: false
   config:
@@ -20,7 +22,7 @@ quarkus:
   log:
     level: INFO
     console:
-      enable: false # для отключения логов при вызове команд через java -jar (локально включить)
+      enable: true
       format: "%d{yyyy-MM-dd HH:mm:ss} %-5p [%c{3.}] (%t) %s%e%n"
   package:
     jar:

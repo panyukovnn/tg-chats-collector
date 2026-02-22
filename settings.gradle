@@ -1,2 +1,3 @@
 rootProject.name = 'tg-chats-collector'
+include 'tg-chats-collector-api'
 

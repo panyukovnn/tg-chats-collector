@@ -18,9 +18,11 @@ repositories {
 }
 
 dependencies {
+    implementation project(':tg-chats-collector-api')
     implementation enforcedPlatform("io.quarkus.platform:quarkus-bom:3.17.0")
     implementation 'io.quarkus:quarkus-arc'
-    implementation 'io.quarkus:quarkus-picocli'
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-rest-jackson'
     implementation 'io.quarkus:quarkus-hibernate-validator'
     implementation 'io.quarkus:quarkus-jackson'
     implementation 'io.quarkus:quarkus-config-yaml'
