@@ -11,19 +11,14 @@ import ru.panyukovnn.tgchatscollector.service.handler.TgCollectorHandler;
  * Контроллер для работы с историей сообщений
  */
 @Path("/api/v1/chat-history")
-public class ChatHistoryController {
+public class ChatHistoryController implements ChatHistoryApi {
 
     @Inject
     TgCollectorHandler tgCollectorHandler;
 
-    /**
-     * Поиск истории сообщений в чате
-     *
-     * @param request запрос на поиск истории сообщений
-     * @return результат поиска истории
-     */
     @POST
     @Path("/search")
+    @Override
     public SearchChatHistoryResponse searchHistory(SearchChatHistoryRequest request) {
         return tgCollectorHandler.handleSearchChatHistoryByPeriod(request);
     }

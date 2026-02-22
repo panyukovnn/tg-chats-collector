@@ -15,43 +15,28 @@ import ru.panyukovnn.tgchatscollector.service.handler.TgCollectorHandler;
  * Контроллер для работы с чатами
  */
 @Path("/api/v1/chats")
-public class ChatController {
+public class ChatController implements ChatApi {
 
     @Inject
     TgCollectorHandler tgCollectorHandler;
 
-    /**
-     * Получить последние N чатов
-     *
-     * @param count количество чатов
-     * @return список последних чатов
-     */
     @GET
     @Path("/last")
+    @Override
     public LastChatsResponse getLastChats(@QueryParam("count") Integer count) {
         return tgCollectorHandler.handleLastChats(count);
     }
 
-    /**
-     * Поиск приватного чата по части имени
-     *
-     * @param request запрос на поиск приватного чата
-     * @return результат поиска чатов
-     */
     @POST
     @Path("/search-private")
+    @Override
     public SearchChatsResponse searchPrivateChat(SearchPrivateChatRequest request) {
         return tgCollectorHandler.handleFindPrivateChat(request);
     }
 
-    /**
-     * Поиск публичного канала по имени
-     *
-     * @param request запрос на поиск публичного канала
-     * @return результат поиска чатов
-     */
     @POST
     @Path("/search-public")
+    @Override
     public SearchChatsResponse searchPublicChannel(SearchPublicChannelByIdRequest request) {
         return tgCollectorHandler.handleFindPublicChannelById(request);
     }
