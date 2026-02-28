@@ -49,3 +49,4 @@ bin/
 /deploy/application-prod.yaml
 /credentials.txt
 /deploy/application-prod.yaml
+/.env

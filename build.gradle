@@ -82,10 +82,11 @@ jacocoTestCoverageVerification {
 
 // Задача для копирования нативных библиотек
 task copyNativeLibs(type: Copy) {
+    dependsOn configurations.runtimeClasspath
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
-    into 'build/libs'
+    into layout.buildDirectory.dir('native-libs')
     include '**/libtdjni*.so'
     include '**/libtdjni*.dylib'
     include '**/tdjni*.so'

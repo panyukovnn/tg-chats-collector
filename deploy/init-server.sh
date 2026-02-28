@@ -7,17 +7,28 @@ REMOTE_DIR=tg-personal-assistant
 # Проверка на наличие файлов рядом со скриптом
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
-APPLICATION_PROD_FILE="$SCRIPT_DIR/application-prod.yaml"
+APPLICATION_PROD_FILE="$SCRIPT_DIR/application-prod.properties"
+TDLIGHT_SESSION_DIR="$SCRIPT_DIR/../tdlight-session"
 
 if [[ ! -f "$COMPOSE_FILE" || ! -f "$APPLICATION_PROD_FILE" ]]; then
-  echo "Ошибка: не найден docker-compose.yml или application-prod.yaml рядом со скриптом."
+  echo "Ошибка: не найден docker-compose.yml или application-prod.properties рядом со скриптом."
   exit 1
 fi
 
-echo "Создание папки $REMOTE_DIR на сервере (если не существует)..."
-ssh "$SSH_CONFIG" "mkdir -p $REMOTE_DIR"
+if [[ ! -d "$TDLIGHT_SESSION_DIR" ]]; then
+  echo "Ошибка: не найдена директория tdlight-session рядом со скриптом."
+  exit 1
+fi
 
-echo "Копирование файлов на сервер..."
-scp "$COMPOSE_FILE" "$APPLICATION_PROD_FILE" "$SSH_CONFIG:$REMOTE_DIR/"
+echo "Синхронизация файлов на сервер..."
+rsync -avz --progress \
+  "$COMPOSE_FILE" \
+  "$APPLICATION_PROD_FILE" \
+  "$SSH_CONFIG:$REMOTE_DIR/"
 
-echo "Готово. Файлы успешно отправлены."
+echo "Синхронизация директории tdlight-session на сервер..."
+rsync -avz --progress \
+  "$TDLIGHT_SESSION_DIR/" \
+  "$SSH_CONFIG:$REMOTE_DIR/tdlight-session/"
+
+echo "Готово. Файлы успешно синхронизированы."

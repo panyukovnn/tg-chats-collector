@@ -7,13 +7,16 @@ WORKDIR /app
 # Аргумент сборки с токеном для чтения пакетов в github
 ARG GH_TOKEN
 
-# Копируем файлы конфигурации для кеширования зависимостей
+# Копируем файлы конфигурации для кэширования зависимостей
 COPY build.gradle settings.gradle ./
 COPY tg-chats-collector-api/build.gradle ./tg-chats-collector-api/
 
 # Прокидываем токен в gradle.properties
 RUN mkdir -p ~/.gradle && \
     echo "githubPackagesReadToken=${GH_TOKEN}" >> ~/.gradle/gradle.properties
+
+# Загружаем зависимости отдельным слоем (для кеширования)
+RUN gradle dependencies --no-daemon
 
 # Копируем исходный код
 COPY src ./src
@@ -27,7 +30,6 @@ RUN gradle build -x test --no-daemon
 FROM eclipse-temurin:21-jre
 
 # Создаем директории для нативных библиотек
-RUN mkdir -p /app/lib
 RUN mkdir -p /app/
 
 # Устанавливаем необходимые зависимости
@@ -37,15 +39,12 @@ RUN apt-get update && apt-get install -y \
     libc++1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build_image /app/build/libs/tg-chats-collector*.jar /app/
-COPY --from=build_image /app/build/libs/tdjni* /app/lib/
-COPY --from=build_image /app/build/libs/libtdjni* /app/lib/
+COPY --from=build_image /app/build/tg-chats-collector-dev-runner.jar /app/app.jar
+COPY --from=build_image /app/build/native-libs/tdjni* /app/lib/
+COPY --from=build_image /app/build/native-libs/libtdjni* /app/lib/
 
 EXPOSE 8083
 ENV TZ=Europe/Moscow
 
-# Добавляем путь к библиотекам в LD_LIBRARY_PATH
-ENV LD_LIBRARY_PATH=/app/lib:${LD_LIBRARY_PATH}
-
 # Запускаем приложение
-ENTRYPOINT ["java", "-Djava.library.path=/app/lib/", "-jar", "/app/tg-chats-collector.jar"]
+ENTRYPOINT ["java", "-Djava.library.path=/app/lib/", "-jar", "/app/app.jar"]
