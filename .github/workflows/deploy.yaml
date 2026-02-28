@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-repo-name:
+    runs-on: ubuntu-latest
+    outputs:
+      repo: ${{ steps.get-name.outputs.repo }}
+    steps:
+      - id: get-name
+        run: echo "repo=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: get-repo-name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверка и извлечение тега из GITHUB_REF
+        id: extract_tag
+        run: |
+          echo "GITHUB_REF=${GITHUB_REF}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "✅ Найден тег: $TAG"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Этот workflow должен запускаться с тега. Текущий ref: $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Deploy to server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PORT: ${{ vars.SERVER_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          IMAGE_TAG: ${{ steps.extract_tag.outputs.tag }}
+          REPO_NAME: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN }}
+          IMAGE_NAME: ${{ needs.get-repo-name.outputs.repo }}
+        run: |
+          # Подключаемся к серверу и выполняем скрипт
+          echo "$SSH_PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${SSH_USER}@${SERVER_IP} "
+            cd ${IMAGE_NAME}
+            echo '${GH_TOKEN}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            REPO_NAME=${REPO_NAME} IMAGE_NAME=${IMAGE_NAME} PORT=${SERVER_PORT} APP_TAG=${IMAGE_TAG} docker compose down -v
+            REPO_NAME=${REPO_NAME} IMAGE_NAME=${IMAGE_NAME} PORT=${SERVER_PORT} APP_TAG=${IMAGE_TAG} docker compose up -d
+          "  
+
+      - name: Health check
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PORT: ${{ vars.SERVER_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          IMAGE_NAME: ${{ needs.get-repo-name.outputs.repo }}
+        run: |
+          echo "Ожидание готовности приложения..."
+          echo "$SSH_PRIVATE_KEY" > private_key && chmod 600 private_key
+          for i in {1..12}; do
+            echo "Попытка $i из 12..."
+            if ssh -o StrictHostKeyChecking=no -i private_key ${SSH_USER}@${SERVER_IP} "curl -s http://localhost:${SERVER_PORT}/${IMAGE_NAME}/actuator/health" | grep -q '"status":"UP"'; then
+              echo "✅ Приложение успешно запущено"
+              rm -f private_key
+              exit 0
+            fi
+            echo "Приложение еще не готово, ожидание 10 секунд..."
+            sleep 10
+          done
+          echo "❌ Приложение не запустилось после 2 минут ожидания"
+          rm -f private_key
+          exit 1
+
+      - name: Notify Telegram on success
+        if: success()
+        run: |
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.NOTIFICATION_TELEGRAM_BOT_TOKEN }}/sendMessage \
+            -d chat_id=${{ secrets.NOTIFICATION_TELEGRAM_CHAT_ID }} \
+            -d text="✅ ${{ needs.get-repo-name.outputs.repo }} %0A Успешно выполнен deploy ${{ github.event.inputs.image_tag }}"
+
+      - name: Notify Telegram on failure
+        if: failure()
+        run: |
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.NOTIFICATION_TELEGRAM_BOT_TOKEN }}/sendMessage \
+            -d chat_id=${{ secrets.NOTIFICATION_TELEGRAM_CHAT_ID }} \
+            -d text="❌ ${{ needs.get-repo-name.outputs.repo }} %0A Ошибка при деплое ${{ github.event.inputs.image_tag }} %0A Посмотреть лог: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
