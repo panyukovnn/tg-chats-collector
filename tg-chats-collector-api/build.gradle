@@ -37,7 +37,7 @@ publishing {
             url = "https://maven.pkg.github.com/PanyukovNN/tg-chats-collector"
             credentials {
                 username = 'PanyukovNN'
-                password = "$githubPackagesWriteToken"
+                password = System.getenv("GH_PACKAGES_WRITE_TOKEN")
             }
         }
     }
