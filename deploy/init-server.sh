@@ -2,7 +2,7 @@
 
 # Конфигурация
 SSH_CONFIG=tabots
-REMOTE_DIR=tg-personal-assistant
+REMOTE_DIR=tg-chats-collector
 
 # Проверка на наличие файлов рядом со скриптом
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

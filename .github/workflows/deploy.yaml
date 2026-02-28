@@ -61,7 +61,7 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > private_key && chmod 600 private_key
           for i in {1..12}; do
             echo "Попытка $i из 12..."
-            if ssh -o StrictHostKeyChecking=no -i private_key ${SSH_USER}@${SERVER_IP} "curl -s http://localhost:${SERVER_PORT}/${IMAGE_NAME}/actuator/health" | grep -q '"status":"UP"'; then
+            if ssh -o StrictHostKeyChecking=no -i private_key ${SSH_USER}@${SERVER_IP} "curl -s http://localhost:${SERVER_PORT}/q/health/live" | grep -q '"status":"UP"'; then
               echo "✅ Приложение успешно запущено"
               rm -f private_key
               exit 0

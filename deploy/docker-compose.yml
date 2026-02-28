@@ -10,5 +10,7 @@ services:
     environment:
       QUARKUS_PROFILE: prod
       QUARKUS_HTTP_PORT: 8080
+    env_file:
+      - ./application-prod.properties
     volumes:
-      - ./application-prod.yaml:/work/config/application-prod.yaml
+      - ./tdlight-session:/tdlight-session
