@@ -8,6 +8,7 @@ REMOTE_DIR=tg-chats-collector
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 APPLICATION_PROD_FILE="$SCRIPT_DIR/application-prod.properties"
+# TODO удалить синхронизацию tdlight-session после написания инструкции по созданию сессии на сервере самостоятельно
 TDLIGHT_SESSION_DIR="$SCRIPT_DIR/../tdlight-session"
 
 if [[ ! -f "$COMPOSE_FILE" || ! -f "$APPLICATION_PROD_FILE" ]]; then

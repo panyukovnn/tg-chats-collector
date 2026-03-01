@@ -11,6 +11,8 @@ tg-collector:
     date-range-messages-limit: 1000
 
 quarkus:
+  console:
+    enabled: false # Для освобождения System.in при вводе одноразового пароля телеграм
   application:
     name: tg-chats-collector
   http:
