@@ -1,7 +1,9 @@
 package ru.panyukovnn.tgchatscollector.controller;
 
 import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
+import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsWithPreviewResponse;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatsResponse;
+import ru.panyukovnn.tgchatscollector.dto.topics.ChatTopicsResponse;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPrivateChatRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPublicChannelByIdRequest;
 
@@ -19,6 +21,14 @@ public interface ChatApi {
     LastChatsResponse getLastChats(Integer count);
 
     /**
+     * Получить последние N чатов с предпросмотром последнего сообщения
+     *
+     * @param count количество чатов
+     * @return список последних чатов с предпросмотром
+     */
+    LastChatsWithPreviewResponse getLastChatsWithPreview(Integer count);
+
+    /**
      * Поиск приватного чата по части имени
      *
      * @param request запрос на поиск приватного чата
@@ -33,4 +43,12 @@ public interface ChatApi {
      * @return результат поиска чатов
      */
     SearchChatsResponse searchPublicChannel(SearchPublicChannelByIdRequest request);
+
+    /**
+     * Получить список топиков форума
+     *
+     * @param chatId идентификатор чата-форума
+     * @return список топиков
+     */
+    ChatTopicsResponse getChatTopics(Long chatId);
 }

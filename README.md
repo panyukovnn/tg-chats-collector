@@ -155,3 +155,32 @@ curl -X POST http://localhost:8083/tg-chats-collector/api/v1/chat-history/search
      -H "Content-Type: application/json" \
      -d '{"chatId": -1001823804554, "limit": 10}'
 ```
+
+## Frontend (React)
+
+Исходники — в каталоге `frontend/`. Минималистичный клиент в стиле Telegram: список чатов слева (с предпросмотром и пагинацией по скроллу), просмотр чата справа, кнопка скачивания истории за период в JSON.
+
+Локальная разработка с dev-сервером Vite:
+```shell
+cd frontend
+npm install
+npm run dev
+```
+Откроется на `http://localhost:5173`; запросы `/tg-chats-collector/*` проксируются на бэкенд `http://localhost:8083`.
+
+Сборка статики:
+```shell
+cd frontend
+npm run build
+```
+
+Запуск через Docker (фронт раздаётся nginx; бэк должен быть запущен на хосте на `:8083`):
+```shell
+cd frontend
+docker build -t tg-chats-collector-frontend:latest .
+docker run -d --name tg-chats-collector-frontend \
+    --add-host backend:host-gateway \
+    -p 8090:80 \
+    tg-chats-collector-frontend:latest
+```
+UI доступен на `http://localhost:8090`. Если бэк подключают как соседний сервис в общей docker-compose-сети, переименуйте контейнер бэка в `backend` и уберите `--add-host`.

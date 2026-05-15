@@ -30,4 +30,7 @@ public class SearchChatHistoryRequest {
 
     @Schema(description = "Дата окончания периода, в UTC")
     private LocalDateTime dateTo;
+
+    @Schema(description = "Прикладывать ли фото из сообщений в виде base64 (image/jpeg)")
+    private Boolean attachPhoto;
 }

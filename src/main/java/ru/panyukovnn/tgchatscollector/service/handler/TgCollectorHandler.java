@@ -6,7 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import ru.panyukovnn.tgchatscollector.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
+import ru.panyukovnn.tgchatscollector.dto.lastchats.ChatWithPreviewDto;
 import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsResponse;
+import ru.panyukovnn.tgchatscollector.dto.lastchats.LastChatsWithPreviewResponse;
+import ru.panyukovnn.tgchatscollector.dto.topics.ChatTopicDto;
+import ru.panyukovnn.tgchatscollector.dto.topics.ChatTopicsResponse;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchChatsResponse;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPrivateChatRequest;
 import ru.panyukovnn.tgchatscollector.dto.searchchat.SearchPublicChannelByIdRequest;
@@ -33,6 +37,18 @@ public class TgCollectorHandler {
         List<ChatInfoDto> lastChatDtos = tgClientService.findLastChats(count);
 
         return new LastChatsResponse(lastChatDtos);
+    }
+
+    public LastChatsWithPreviewResponse handleLastChatsWithPreview(Integer count) {
+        List<ChatWithPreviewDto> chats = tgClientService.findLastChatsWithPreview(count);
+
+        return new LastChatsWithPreviewResponse(chats);
+    }
+
+    public ChatTopicsResponse handleChatTopics(Long chatId) {
+        List<ChatTopicDto> topics = tgClientService.findAllForumTopics(chatId);
+
+        return new ChatTopicsResponse(topics);
     }
 
     public SearchChatsResponse handleFindPrivateChat(SearchPrivateChatRequest searchRequest) {
@@ -72,11 +88,12 @@ public class TgCollectorHandler {
         Integer limit = searchChatHistoryRequest.getLimit();
         LocalDateTime dateFrom = searchChatHistoryRequest.getDateFrom();
         LocalDateTime dateTo = searchChatHistoryRequest.getDateTo();
+        boolean attachPhoto = Boolean.TRUE.equals(searchChatHistoryRequest.getAttachPhoto());
 
         ChatInfo chatInfo = tgClientService.findChatById(chatId);
         TopicInfo topicInfo = tgClientService.findTopicInfoById(chatId, topicId);
 
-        List<TgMessageDto> messageDtos = tgClientService.collectMessages(chatId, topicInfo, limit, dateFrom, dateTo).stream()
+        List<TgMessageDto> messageDtos = tgClientService.collectMessages(chatId, topicInfo, limit, dateFrom, dateTo, attachPhoto).stream()
             .sorted(Comparator.comparing(TgMessageDto::getDateTime))
             .toList();
 
