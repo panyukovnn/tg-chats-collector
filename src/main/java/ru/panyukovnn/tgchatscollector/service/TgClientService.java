@@ -9,17 +9,24 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import ru.panyukovnn.tgchatscollector.dto.ChatInfoDto;
 import ru.panyukovnn.tgchatscollector.dto.TgMessageDto;
+import ru.panyukovnn.tgchatscollector.dto.lastchats.ChatWithPreviewDto;
+import ru.panyukovnn.tgchatscollector.dto.topics.ChatTopicDto;
 import ru.panyukovnn.tgchatscollector.dto.telegram.ChatInfo;
 import ru.panyukovnn.tgchatscollector.dto.telegram.TopicInfo;
 import ru.panyukovnn.tgchatscollector.exception.BusinessException;
 import ru.panyukovnn.tgchatscollector.property.TgChatLoaderProperty;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -93,18 +100,20 @@ public class TgClientService {
                                               TopicInfo topic,
                                               @Nullable Integer limit,
                                               @Nullable LocalDateTime dateFrom,
-                                              @Nullable LocalDateTime dateTo) {
+                                              @Nullable LocalDateTime dateTo,
+                                              boolean attachPhoto) {
         // Открываем чат, чтобы TDLib синхронизировал последние сообщения из облака
         tgClient.send(new TdApi.OpenChat(chatId)).get();
 
         try {
             int effectiveLimit = limit != null ? limit : tgChatLoaderProperty.defaultMessagesLimit();
+            CollectionState state = new CollectionState(new ArrayList<>(), new HashSet<>(), new HashMap<>(), attachPhoto);
 
             if (dateFrom != null) {
-                return collectMessagesByDateRange(chatId, topic, 0L, effectiveLimit, dateFrom, dateTo);
+                return collectMessagesByDateRange(chatId, topic, 0L, effectiveLimit, dateFrom, dateTo, state);
             }
 
-            return collectMessagesByLimit(chatId, topic, 0L, effectiveLimit);
+            return collectMessagesByLimit(chatId, topic, 0L, effectiveLimit, state);
         } finally {
             tgClient.send(new TdApi.CloseChat(chatId)).get();
         }
@@ -119,9 +128,12 @@ public class TgClientService {
      * @param limit  количество сообщений для сбора
      * @return список сообщений
      */
-    public List<TgMessageDto> collectMessagesByLimit(Long chatId, TopicInfo topic, long lastMessageId, int limit) {
-        List<TgMessageDto> result = new ArrayList<>();
-        Set<Long> loadedMessageIds = new HashSet<>();
+    public List<TgMessageDto> collectMessagesByLimit(Long chatId,
+                                                     TopicInfo topic,
+                                                     long lastMessageId,
+                                                     int limit,
+                                                     CollectionState state) {
+        List<TgMessageDto> result = state.result();
         long fromMessageId = lastMessageId;
 
         while (result.size() < limit && !Thread.interrupted()) {
@@ -133,9 +145,7 @@ public class TgClientService {
                 break;
             }
 
-            long oldestMessageIdInBatch = processMessagesBatch(
-                messages, topic, null, null, limit, result, loadedMessageIds
-            );
+            long oldestMessageIdInBatch = processMessagesBatch(messages, topic, null, null, limit, state);
 
             if (oldestMessageIdInBatch == fromMessageId) {
                 log.info("Пагинация завершена, нет новых сообщений, собрано: {}", result.size());
@@ -167,9 +177,9 @@ public class TgClientService {
                                                          long lastMessageId,
                                                          int limit,
                                                          LocalDateTime dateFrom,
-                                                         @Nullable LocalDateTime dateTo) {
-        List<TgMessageDto> result = new ArrayList<>();
-        Set<Long> loadedMessageIds = new HashSet<>();
+                                                         @Nullable LocalDateTime dateTo,
+                                                         CollectionState state) {
+        List<TgMessageDto> result = state.result();
         long fromMessageId = lastMessageId;
         boolean reachedDateFrom = false;
 
@@ -182,9 +192,7 @@ public class TgClientService {
                 break;
             }
 
-            long oldestMessageIdInBatch = processMessagesBatch(
-                messages, topic, dateFrom, dateTo, limit, result, loadedMessageIds
-            );
+            long oldestMessageIdInBatch = processMessagesBatch(messages, topic, dateFrom, dateTo, limit, state);
 
             // Проверяем, достигли ли мы даты начала периода
             TdApi.Message oldestMessage = messages.messages[messages.messages.length - 1];
@@ -220,18 +228,17 @@ public class TgClientService {
                                       @Nullable LocalDateTime dateFrom,
                                       @Nullable LocalDateTime dateTo,
                                       int limit,
-                                      List<TgMessageDto> result,
-                                      Set<Long> loadedMessageIds) {
+                                      CollectionState state) {
         for (TdApi.Message message : messages.messages) {
-            if (result.size() >= limit) {
+            if (state.result().size() >= limit) {
                 break;
             }
 
-            if (loadedMessageIds.contains(message.id)) {
+            if (state.loadedMessageIds().contains(message.id)) {
                 continue;
             }
 
-            loadedMessageIds.add(message.id);
+            state.loadedMessageIds().add(message.id);
 
             if (!isMessageFromTopic(message, topic)) {
                 continue;
@@ -247,11 +254,20 @@ public class TgClientService {
                 continue;
             }
 
-            TgMessageDto messageDto = mapToMessageDto(message);
-            result.add(messageDto);
+            TgMessageDto messageDto = mapToMessageDto(message, state.senderCache(), state.attachPhoto());
+            state.result().add(messageDto);
         }
 
         return messages.messages[messages.messages.length - 1].id;
+    }
+
+    /**
+     * Накопительное состояние выгрузки сообщений в пределах одного запроса
+     */
+    public record CollectionState(List<TgMessageDto> result,
+                                  Set<Long> loadedMessageIds,
+                                  Map<Long, SenderInfo> senderCache,
+                                  boolean attachPhoto) {
     }
 
     /**
@@ -275,22 +291,136 @@ public class TgClientService {
      *
      * @return DTO сообщения или null, если сообщение не содержит текста
      */
-    private TgMessageDto mapToMessageDto(TdApi.Message message) {
+    private TgMessageDto mapToMessageDto(TdApi.Message message,
+                                         Map<Long, SenderInfo> senderCache,
+                                         boolean attachPhoto) {
         String text = extractMessageTextSafely(message.content);
 
         LocalDateTime messageDateTimeUtc = LocalDateTime.ofEpochSecond(message.date, 0, ZoneOffset.UTC);
         LocalDateTime messageDateTime = messageDateTimeUtc.plusHours(3); // Московское время
 
         ReplyToMessage replyToMessage = fetchReplyToMessage(message);
+        Long senderId = extractSenderId(message);
+        SenderInfo senderInfo = resolveSenderInfo(message.senderId, senderCache);
+        String photoBase64 = null;
+
+        if (attachPhoto && message.content instanceof TdApi.MessagePhoto messagePhoto) {
+            photoBase64 = downloadPhotoAsBase64(messagePhoto);
+        }
 
         return TgMessageDto.builder()
-            .senderId(extractSenderId(message))
+            .senderId(senderId)
+            .senderName(senderInfo != null ? senderInfo.name() : null)
+            .senderUsername(senderInfo != null ? senderInfo.username() : null)
             .dateTime(messageDateTime)
             .messageId(message.id)
             .replyToText(replyToMessage != null ? replyToMessage.text : null)
             .replyToMessageId(replyToMessage != null ? replyToMessage.id : null)
             .text(text)
+            .photoBase64(photoBase64)
             .build();
+    }
+
+    /**
+     * Скачивает фото из сообщения и кодирует в base64. Берётся наибольшая доступная превью-копия
+     *
+     * @param messagePhoto фото-сообщение TDLib
+     * @return base64-строка содержимого файла либо null при ошибке
+     */
+    @Nullable
+    private String downloadPhotoAsBase64(TdApi.MessagePhoto messagePhoto) {
+        TdApi.PhotoSize[] sizes = messagePhoto.photo != null ? messagePhoto.photo.sizes : null;
+
+        if (sizes == null || sizes.length == 0) {
+            return null;
+        }
+
+        TdApi.File file = sizes[sizes.length - 1].photo;
+
+        try {
+            if (file.local == null || !file.local.isDownloadingCompleted) {
+                file = tgClient.send(new TdApi.DownloadFile(file.id, 32, 0, 0, true)).get();
+            }
+
+            if (file.local == null || file.local.path == null || file.local.path.isEmpty()) {
+                return null;
+            }
+
+            byte[] bytes = Files.readAllBytes(Path.of(file.local.path));
+
+            return Base64.getEncoder().encodeToString(bytes);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Прервана загрузка фото {}: {}", file.id, e.getMessage());
+
+            return null;
+        } catch (Exception e) {
+            log.warn("Не удалось загрузить фото {}: {}", file.id, e.getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * Возвращает имя и username отправителя, кешируя результаты по идентификатору отправителя в пределах одного запроса
+     */
+    @Nullable
+    private SenderInfo resolveSenderInfo(TdApi.MessageSender sender, Map<Long, SenderInfo> cache) {
+        if (sender == null) {
+            return null;
+        }
+
+        long key;
+
+        if (sender instanceof TdApi.MessageSenderUser userSender) {
+            key = userSender.userId;
+        } else if (sender instanceof TdApi.MessageSenderChat chatSender) {
+            key = chatSender.chatId;
+        } else {
+            return null;
+        }
+
+        if (cache.containsKey(key)) {
+            return cache.get(key);
+        }
+
+        SenderInfo info = fetchSenderInfo(sender);
+        cache.put(key, info);
+
+        return info;
+    }
+
+    @Nullable
+    private SenderInfo fetchSenderInfo(TdApi.MessageSender sender) {
+        try {
+            if (sender instanceof TdApi.MessageSenderUser userSender) {
+                TdApi.User user = tgClient.send(new TdApi.GetUser(userSender.userId)).get();
+                String firstName = user.firstName != null ? user.firstName : "";
+                String lastName = user.lastName != null ? user.lastName : "";
+                String fullName = (firstName + " " + lastName).trim();
+                String username = extractPrimaryUsername(user.usernames);
+
+                return new SenderInfo(fullName.isEmpty() ? null : fullName, username);
+            }
+
+            if (sender instanceof TdApi.MessageSenderChat chatSender) {
+                TdApi.Chat senderChat = tgClient.send(new TdApi.GetChat(chatSender.chatId)).get();
+
+                return new SenderInfo(senderChat.title, null);
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Не удалось получить информацию об отправителе: {}", e.getMessage());
+        }
+
+        return null;
+    }
+
+    private String extractPrimaryUsername(TdApi.Usernames usernames) {
+        if (usernames == null || usernames.activeUsernames == null || usernames.activeUsernames.length == 0) {
+            return null;
+        }
+
+        return usernames.activeUsernames[0];
     }
 
     private boolean isEmptyBatch(TdApi.Messages messages) {
@@ -327,6 +457,44 @@ public class TgClientService {
                 return new ChatInfo(chat.id, chatPublicName, defineChatType(chat), chat.title);
             })
             .toList();
+    }
+
+    /**
+     * Проверяет, является ли чат форумом (имеет ли топики)
+     */
+    private boolean isForumChat(TdApi.Chat chat) {
+        if (!(chat.type instanceof TdApi.ChatTypeSupergroup supergroup)) {
+            return false;
+        }
+
+        try {
+            TdApi.Supergroup supergroupInfo = tgClient.send(new TdApi.GetSupergroup(supergroup.supergroupId)).get();
+
+            return supergroupInfo.isForum;
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Не удалось получить информацию о супергруппе для определения форума: {}", chat.title);
+
+            return false;
+        }
+    }
+
+    /**
+     * Получить все топики форума
+     *
+     * @param chatId идентификатор чата
+     * @return список топиков
+     */
+    @SneakyThrows
+    public List<ChatTopicDto> findAllForumTopics(long chatId) {
+        return tgClient.send(new TdApi.GetForumTopics(chatId, "", 0, 0L, 0L, 100))
+            .thenApply(topics -> Arrays.stream(topics.topics)
+                .map(topic -> ChatTopicDto.builder()
+                    .topicId(topic.info.messageThreadId)
+                    .title(topic.info.name)
+                    .general(topic.info.isGeneral)
+                    .build())
+                .toList())
+            .get();
     }
 
     @SneakyThrows
@@ -366,6 +534,67 @@ public class TgClientService {
         }
 
         return list;
+    }
+
+    /**
+     * Получить последние N чатов с предпросмотром последнего сообщения
+     *
+     * @param count количество чатов
+     * @return список чатов с предпросмотром
+     */
+    @SneakyThrows
+    public List<ChatWithPreviewDto> findLastChatsWithPreview(Integer count) {
+        TdApi.Chats chats = tgClient.send(new TdApi.GetChats(new TdApi.ChatListMain(), count))
+            .get();
+
+        List<ChatWithPreviewDto> result = new ArrayList<>();
+        for (long chatId : chats.chatIds) {
+            TdApi.Chat chat = tgClient.send(new TdApi.GetChat(chatId)).get();
+            ChatWithPreviewDto preview = buildChatPreview(chat);
+            result.add(preview);
+        }
+
+        return result;
+    }
+
+    /**
+     * Формирует превью чата с информацией о последнем сообщении
+     */
+    private ChatWithPreviewDto buildChatPreview(TdApi.Chat chat) {
+        ChatWithPreviewDto.ChatWithPreviewDtoBuilder builder = ChatWithPreviewDto.builder()
+            .chatId(chat.id)
+            .type(defineChatType(chat))
+            .title(chat.title)
+            .forum(isForumChat(chat));
+
+        TdApi.Message lastMessage = chat.lastMessage;
+
+        if (lastMessage != null) {
+            String text = extractMessageTextSafely(lastMessage.content);
+            LocalDateTime dateTimeUtc = LocalDateTime.ofEpochSecond(lastMessage.date, 0, ZoneOffset.UTC);
+            String senderName = resolveSenderName(lastMessage);
+
+            builder.lastMessageText(text)
+                .lastMessageSenderName(senderName)
+                .lastMessageDateTime(dateTimeUtc.plusHours(3));
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Резолвит отображаемое имя отправителя сообщения (имя пользователя либо название чата-отправителя)
+     */
+    private String resolveSenderName(TdApi.Message message) {
+        SenderInfo info = fetchSenderInfo(message.senderId);
+
+        return info != null ? info.name() : null;
+    }
+
+    /**
+     * Имя и публичный username отправителя
+     */
+    public record SenderInfo(String name, String username) {
     }
 
     private static Long extractSenderId(TdApi.Message message) {
